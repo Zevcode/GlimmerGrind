@@ -57,6 +57,7 @@ struct CombatView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            creditChip
             pips
         }
         .padding(.horizontal, 14)
@@ -66,6 +67,19 @@ struct CombatView: View {
             faction.frame(width: 3)
                 .animation(.easeInOut(duration: 1.2), value: faction)
         }
+    }
+
+    /// Says plainly whether this kill will move the front line.
+    private var creditChip: some View {
+        let on = game.engaged
+        return Text(on ? "ENGAGED" : "IDLE · NO ADVANCE")
+            .font(.data(9))
+            .tracking(1.4)
+            .foregroundStyle(on ? Pal.solar : Pal.dim)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .overlay(Rectangle().stroke(on ? Pal.solar.opacity(0.5) : Pal.rail, lineWidth: 1))
+            .animation(.easeOut(duration: 0.2), value: on)
     }
 
     private var pips: some View {

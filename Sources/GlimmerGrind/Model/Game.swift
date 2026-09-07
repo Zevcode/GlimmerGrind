@@ -75,6 +75,10 @@ struct Enemy {
     var rank: String
     var area: Area
     var timer: Double
+    /// Set the moment you land a shot or an ability on this target.
+    /// Sectors only advance on kills you took part in — the fireteam farms,
+    /// but it does not push the front line on its own.
+    var playerHit: Bool = false
 }
 
 // MARK: - Damage popups
@@ -124,6 +128,7 @@ final class Game {
 
     private var autoAccumulator: Double = 0
     private var toastExpiry: Date = .distantPast
+    private var lastIdleNotice: Date = .distantPast
 
     private static let saveKey = "glimmer-grind-save-v1"
 
@@ -131,7 +136,7 @@ final class Game {
         if !load() {
             spawn()
             addLog("Ghost online. Hostiles inbound in the <Cosmodrome>.")
-            addLog("Tap the target to fire. Buy Guardians to farm while you idle.")
+            addLog("Sectors advance only on kills you <join>. The fireteam farms glimmer while you idle.")
         }
     }
 
@@ -221,6 +226,9 @@ final class Game {
 
     var pendingShards: Int { shardsFor(runBest) }
 
+    /// True once you have hit the current target — i.e. this kill will count.
+    var engaged: Bool { enemy?.playerHit ?? false }
+
     var grenadeDamage: Double { (fireteamDPS * 11 + clickDamage * 22) * abilityMult }
     var meleeDamage: Double { (fireteamDPS * 4.5 + clickDamage * 11) * abilityMult }
 
@@ -250,11 +258,13 @@ final class Game {
 
     // MARK: - Combat
 
-    func damage(_ amount: Double, popup: Popup.Kind?, at point: (Double, Double)? = nil) {
+    func damage(_ amount: Double, popup: Popup.Kind?, at point: (Double, Double)? = nil,
+                fromPlayer: Bool = false) {
         guard var e = enemy else { return }
         var dealt = amount
         if e.isBoss { dealt *= bossMult }
         e.hp -= dealt
+        if fromPlayer { e.playerHit = true }
         stats.damage += dealt
         enemy = e
 
@@ -280,6 +290,17 @@ final class Game {
             addDrop(rollItem(zone: zone, boss: boss, luck: luck))
         }
 
+        // The fireteam farms on its own, but the front line only moves on kills
+        // you took part in. An uncredited kill still pays out — it just respawns.
+        guard e.playerHit else {
+            if Date().timeIntervalSince(lastIdleNotice) > 25 {
+                lastIdleNotice = Date()
+                addLog("Idle kill — glimmer only. <Fire on a target> to advance the sector.")
+            }
+            spawn()
+            return
+        }
+
         if boss {
             stats.bosses += 1
             addLog("<Sector \(zone)> cleared — \(e.name) down.")
@@ -302,12 +323,17 @@ final class Game {
     }
 
     private func bossFail() {
-        addLog("Fireteam wiped. Regrouping at Sector \(zone).")
-        showToast("Wipe — boss reset")
+        if enemy?.playerHit == true {
+            addLog("Fireteam wiped. Regrouping at Sector \(zone).")
+            showToast("Wipe — boss reset")
+        }
         spawn()
     }
 
-    func fire(at point: (Double, Double)? = nil) {
+    /// `manual` is you pulling the trigger. Auto-shots from Arc or Auto-Loader
+    /// deal damage and earn glimmer, but they do not count as participation —
+    /// advancing a sector is something you do, not something you buy.
+    func fire(at point: (Double, Double)? = nil, manual: Bool = true) {
         guard enemy != nil else { return }
         var dmg = clickDamage
         let crit = Double.random(in: 0...1) < critChance
@@ -315,7 +341,7 @@ final class Game {
         stats.clicks += 1
         superEnergy = min(100, superEnergy + 0.25 * (1 + gearStat(.superEnergy) / 100))
         hitPulse = 1
-        damage(dmg, popup: crit ? .crit : .hit, at: point)
+        damage(dmg, popup: crit ? .crit : .hit, at: point, fromPlayer: manual)
     }
 
     // MARK: - Abilities
@@ -344,11 +370,11 @@ final class Game {
         switch ability {
         case .grenade:
             cooldowns["grenade"] = cooldownLength(.grenade)
-            damage(grenadeDamage, popup: .ability)
+            damage(grenadeDamage, popup: .ability, fromPlayer: true)
             flash(sub.hex)
         case .melee:
             cooldowns["melee"] = cooldownLength(.melee)
-            damage(meleeDamage, popup: .ability)
+            damage(meleeDamage, popup: .ability, fromPlayer: true)
         case .classAbility:
             cooldowns["class"] = cooldownLength(.classAbility)
             buffs.append(Buff(kind: .click, value: 2.2, remaining: 14, name: sub.classAbility))
@@ -357,7 +383,7 @@ final class Game {
         case .superAbility:
             superEnergy = 0
             let dmg = (fireteamDPS * 45 + clickDamage * 60) * abilityMult
-            damage(dmg, popup: .ability)
+            damage(dmg, popup: .ability, fromPlayer: true)
             buffs.append(Buff(kind: .all, value: 2.5, remaining: 9, name: sub.superName))
             flash(sub.hex)
             addLog("<\(sub.superName)> cast — \(Fmt.n(dmg)) damage, 2.5× for 9s.")
@@ -558,7 +584,7 @@ final class Game {
             autoAccumulator += dt * shots
             while autoAccumulator >= 1 {
                 autoAccumulator -= 1
-                if enemy != nil { fire() }
+                if enemy != nil { fire(manual: false) }
             }
         }
 

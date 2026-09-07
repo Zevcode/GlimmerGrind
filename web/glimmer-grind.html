@@ -165,6 +165,8 @@ button:disabled{cursor:not-allowed}
 .zonebar .loc{flex:1;min-width:0}
 .zonebar .loc b{font-family:var(--f-disp);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;display:block}
 .zonebar .loc span{font-family:var(--f-mono);font-size:10px;color:var(--ash);letter-spacing:.06em}
+.chip{font-family:var(--f-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;padding:3px 7px;white-space:nowrap;color:var(--dim);box-shadow:inset 0 0 0 1px var(--rail);transition:color .2s,box-shadow .2s}
+.chip.on{color:var(--solar);box-shadow:inset 0 0 0 1px rgba(255,138,61,.5)}
 .pips{display:flex;gap:3px}
 .pip{width:11px;height:5px;background:var(--rail);transform:skewX(-20deg)}
 .pip.done{background:var(--solar)}
@@ -395,6 +397,7 @@ button:disabled{cursor:not-allowed}
       <div class="zonebar">
         <div class="sector"><span id="z-num">1</span><em>Sector</em></div>
         <div class="loc"><b id="z-area">Cosmodrome</b><span id="z-faction">Fallen — House of Dusk</span></div>
+        <span class="chip" id="credit-chip">Idle</span>
         <div class="pips" id="z-pips"></div>
         <button class="btn ghost" id="btn-auto" aria-pressed="true">Auto ▸</button>
       </div>
@@ -713,14 +716,15 @@ function spawn(){
     name = pick(['Splinter','Fell','Wretched','Blighted','Rift','Hollow','Ashen','Torn'],rnd)+' '+base;
   }
   const hp=enemyMaxHp(z,boss);
-  E={hp:hp,max:hp,boss:boss,name:name,rank:rank,area:a,timer:boss?30:0};
+  E={hp:hp,max:hp,boss:boss,name:name,rank:rank,area:a,timer:boss?30:0,hit:false};
   renderEnemy();
 }
 
-function damage(amount,kind){
+function damage(amount,kind,fromPlayer){
   if(!E) return;
   if(E.boss) amount*=bossMult();
   E.hp-=amount; S.stats.dmg+=amount;
+  if(fromPlayer) E.hit=true;
   if(kind) popDamage(amount,kind);
   if(E.hp<=0) killEnemy();
   else renderHp();
@@ -737,6 +741,18 @@ function killEnemy(){
     S.stats.drops++;
     addDrop(rollItem(z,boss,luck));
   }
+  // The fireteam farms on its own, but the front line only moves on kills
+  // you took part in. An uncredited kill still pays out — it just respawns.
+  if(!E.hit){
+    if(Date.now()-lastIdleNotice>25000){
+      lastIdleNotice=Date.now();
+      log('Idle kill — glimmer only. <b>Fire on a target</b> to advance the sector.');
+    }
+    spawn();
+    renderTop(); renderZone();
+    return;
+  }
+
   if(boss){
     S.stats.bosses++;
     log('<b>Sector '+z+'</b> cleared — '+E.name+' down.');
@@ -760,8 +776,10 @@ function advance(){
 }
 
 function bossFail(){
-  log('Fireteam wiped. Regrouping at Sector '+S.zone+'.');
-  toast('Wipe — boss reset');
+  if(E && E.hit){
+    log('Fireteam wiped. Regrouping at Sector '+S.zone+'.');
+    toast('Wipe — boss reset');
+  }
   spawn();
 }
 
@@ -817,14 +835,18 @@ function dismantle(item){
 
 /* ============================ abilities ============================ */
 
-function fire(x,y){
+// `manual` is you pulling the trigger. Auto-shots from Arc or Auto-Loader deal
+// damage and earn glimmer, but they are not participation — advancing a sector
+// is something you do, not something you buy.
+function fire(x,y,manual){
+  if(manual===undefined) manual=true;
   let dmg=clickDamage();
   const crit=Math.random()<critChance();
   if(crit) dmg*=critMult();
   S.stats.clicks++;
   S.superE=Math.min(100,S.superE+0.25*(1+gearStat('super')/100));
   lastClickPos=[x,y];
-  damage(dmg,crit?'crit':'hit');
+  damage(dmg,crit?'crit':'hit',manual);
   hitShake();
 }
 
@@ -834,7 +856,7 @@ function useAbility(kind){
     if(S.superE<100) return;
     S.superE=0;
     const dmg=(teamDps()*45+clickDamage()*60)*abilityMult();
-    damage(dmg,'abil');
+    damage(dmg,'abil',true);
     S.buffs.push({k:'all',v:2.5,t:9,n:sc.sup});
     flash(sc.c);
     log('<b>'+sc.sup+'</b> cast — '+fmt(dmg)+' damage, 2.5× for 9s.');
@@ -843,12 +865,12 @@ function useAbility(kind){
     if(S.cd.grenade>0) return;
     S.cd.grenade=18*cdrMult();
     const dmg=(teamDps()*11+clickDamage()*22)*abilityMult();
-    damage(dmg,'abil'); flash(sc.c);
+    damage(dmg,'abil',true); flash(sc.c);
   }else if(kind==='melee'){
     if(S.cd.melee>0) return;
     S.cd.melee=10*cdrMult();
     const dmg=(teamDps()*4.5+clickDamage()*11)*abilityMult();
-    damage(dmg,'abil');
+    damage(dmg,'abil',true);
   }else if(kind==='cls'){
     if(S.cd.cls>0) return;
     S.cd.cls=32*cdrMult();
@@ -906,7 +928,7 @@ function doReset(){
 
 /* ============================ loop ============================ */
 
-let lastClickPos=null, acc=0, autoAcc=0, uiAcc=0;
+let lastClickPos=null, acc=0, autoAcc=0, uiAcc=0, lastIdleNotice=0;
 function tick(dt){
   const dps=teamDps();
   if(E && dps>0) damage(dps*dt,null);
@@ -914,7 +936,7 @@ function tick(dt){
   const shots=autoShots();
   if(shots>0){
     autoAcc+=dt*shots;
-    while(autoAcc>=1){ autoAcc-=1; if(E) fire(null,null); }
+    while(autoAcc>=1){ autoAcc-=1; if(E) fire(null,null,false); }
   }
 
   for(const k in S.cd) if(S.cd[k]>0) S.cd[k]=Math.max(0,S.cd[k]-dt);
@@ -985,6 +1007,12 @@ function renderEnemy(){
 
 function renderHp(){
   if(!E) return;
+  const chip=$('#credit-chip');
+  if(chip){
+    const on=!!E.hit;
+    chip.textContent = on ? 'Engaged' : 'Idle · no advance';
+    chip.classList.toggle('on',on);
+  }
   const p=Math.max(0,E.hp)/E.max;
   $('#hpfill').style.transform='scaleX('+p+')';
   $('#hp-text').textContent=fmt(Math.max(0,E.hp))+' / '+fmt(E.max);
@@ -1384,7 +1412,7 @@ if(returning){
   offline();
 }else{
   log('Ghost online. Hostiles inbound in the <b>Cosmodrome</b>.');
-  log('Click the target to fire. Buy Guardians to farm while you idle.');
+  log('Sectors advance only on kills you <b>join</b>. The fireteam farms glimmer while you idle.');
 }
 
 setInterval(save,10000);

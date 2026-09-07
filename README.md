@@ -44,6 +44,13 @@ Guardians you hire and level on a `1.07^n` cost curve, each with ✦ upgrades at
 levels 10/25/50/100/175/300 that double their output. Click damage scales off
 fireteam DPS, so shooting stays worth doing deep into a run.
 
+**Sectors only advance on kills you take part in.** Land a shot or an ability on
+a target and that kill counts, even if the fireteam finishes it. Walk away and
+the fireteam keeps killing, keeps banking glimmer and keeps pulling engrams —
+but the front line holds where you left it. Auto-shots from Arc or Auto-Loader
+deal damage without counting as participation, by design: progress is something
+you do, not something you buy. The HUD says which state you're in.
+
 Eight gear slots average into a **Light Level** that multiplies all damage.
 Engrams roll rarity, power and perks; the Postmaster holds twelve and
 auto-dismantles overflow. Three subclasses swap your passive and your whole
