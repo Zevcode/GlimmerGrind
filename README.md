@@ -1,12 +1,11 @@
 # Glimmer Grind
 
-An idle looter-shooter for macOS and iOS — Clicker Heroes progression wearing a
+An idle looter-shooter for macOS — Clicker Heroes progression wearing a
 Destiny-flavoured HUD. Farm sectors, build a fireteam, chase engrams, reset your
 Light for shards, repeat.
 
-Written in SwiftUI. One codebase, two platforms, no dependencies, no binary
-assets — every sigil, class mark, engram and app icon is drawn from vector paths
-in code.
+Written in SwiftUI. No dependencies, no binary assets — every sigil, class mark,
+engram and app icon is drawn from vector paths in code.
 
 ---
 
@@ -26,8 +25,7 @@ in code.
 
 ## Build and run
 
-**macOS** — needs only the Swift command line tools (`xcode-select --install`),
-no Xcode:
+Needs only the Swift command line tools (`xcode-select --install`), no Xcode:
 
 ```bash
 ./build-mac.sh              # → build/GlimmerGrind.app
@@ -37,16 +35,7 @@ no Xcode:
 The script compiles with `swiftc`, generates the app icon, assembles the bundle
 by hand and ad-hoc signs it. Roughly ten seconds from clean.
 
-**iOS** — needs Xcode. ⚠️ **The iOS target has never been compiled.** The code is
-written cross-platform and the macOS build is clean, but treat the first iOS
-build as unverified.
-
-1. **File → New → Project → iOS → App**, SwiftUI, named `GlimmerGrind`.
-2. Delete the generated `ContentView.swift` and `GlimmerGrindApp.swift`.
-3. Drag `Sources/GlimmerGrind` into the project navigator (**Copy items if
-   needed**, **Create groups**).
-4. Set the deployment target to **iOS 17.0** — `@Observable` requires it.
-5. Run.
+Requires macOS 14 or later.
 
 ## How it plays
 
@@ -67,7 +56,7 @@ Keys — `Space` fire · `Q` grenade · `E` melee · `C` class ability · `R` su
 
 ```
 Sources/GlimmerGrind/
-  GlimmerGrindApp.swift   @main — the only file that differs by platform
+  GlimmerGrindApp.swift   @main — window scene and sizing
   Model/
     GameData.swift        all static content: destinations, guardians, loot tables
     Game.swift            @Observable engine: combat, loot, prestige, save/load
