@@ -1,0 +1,15 @@
+# Build output
+build/
+.build/
+DerivedData/
+
+# Generated from Tools/make-icon.swift at build time
+Tools/AppIcon.icns
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store

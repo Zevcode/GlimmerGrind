@@ -1,0 +1,1393 @@
+<title>Glimmer Grind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  /* graphite ground — warm-biased neutrals, no blue cast */
+  --void:#0C0B0C;
+  --hull:#161315;
+  --plate:#221E20;
+  --plate-hi:#2E2A2C;
+  --rail:#3C3639;
+  --edge:rgba(255,255,255,.06);
+  --bone:#F1ECE4;
+  --ash:#A09792;
+  --dim:#6C6460;
+
+  /* the Light — an ember range, not one swatch */
+  --ember:#D8441A;
+  --solar:#FF8A3D;
+  --solar-deep:#A8380F;
+  --gold:#FFC46B;
+  --solar-glow:rgba(255,138,61,.18);
+
+  /* currencies read apart from one another */
+  --glimmer:#5CD0C4;
+
+  /* information colors stay cool against the warm ground */
+  --arc:#7FD8FF;
+  --voidlight:#B36BF2;
+  --ok:#6FCF8E;
+  --warn:#EFD84E;
+  --bad:#E0574F;
+
+  --r0:#B5AEA6;
+  --r1:#6FBE5A;
+  --r2:#5A8FE0;
+  --r3:#B366E8;
+  --r4:#EFD84E;
+
+  /* set from JS on every spawn — the destination tints the room */
+  --faction:#FF8A3D;
+
+  --f-disp:'Chakra Petch','Segoe UI',system-ui,sans-serif;
+  --f-body:'Barlow','Helvetica Neue',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+
+  --chamfer:polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  --s1:4px; --s2:8px; --s3:12px; --s4:18px; --s5:28px;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:linear-gradient(180deg,#151113,var(--void) 45%);
+  background-color:var(--void);
+  color:var(--bone);
+  font-family:var(--f-body);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+
+body::before{
+  content:"";
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(110% 70% at 50% -12%, color-mix(in srgb, var(--faction) 11%, transparent), transparent 62%),
+    radial-gradient(90% 55% at 50% 112%, rgba(216,68,26,.07), transparent 66%);
+  transition:background 1.2s ease;
+}
+
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid var(--solar);outline-offset:2px}
+
+/* ---------- shell ---------- */
+.app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100dvh;padding:10px;gap:10px;max-width:1560px;margin:0 auto}
+
+.hud{
+  display:flex;align-items:stretch;gap:2px;flex-wrap:wrap;
+  background:var(--hull);border:1px solid var(--rail);
+}
+.crest{
+  display:flex;align-items:center;gap:10px;padding:9px 16px 9px 13px;
+  background:linear-gradient(105deg,var(--ember) -12%,#5E2410 58%,transparent 128%);
+  clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%);
+  padding-right:26px;
+}
+.crest svg{width:24px;height:24px;flex:none}
+.crest h1{font-family:var(--f-disp);font-size:16px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin:0;white-space:nowrap}
+.crest small{display:block;font-family:var(--f-mono);font-size:9px;letter-spacing:.22em;color:rgba(237,232,220,.62);text-transform:uppercase}
+
+.readouts{display:flex;flex:1;min-width:0;flex-wrap:wrap}
+.ro{padding:8px 18px;display:flex;flex-direction:column;justify-content:center;min-width:96px;border-left:1px solid rgba(44,55,80,.7)}
+.ro b{font-family:var(--f-disp);font-size:17px;font-weight:600;letter-spacing:.02em;font-variant-numeric:tabular-nums;line-height:1.15}
+.ro span{font-family:var(--f-mono);font-size:9px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+.ro.glim b{color:var(--glimmer)} .ro.light b{color:var(--gold)} .ro.shard b{color:var(--r3)} .ro.dps b{color:var(--solar)}
+.hud-actions{display:flex;align-items:center;gap:6px;padding:0 10px;margin-left:auto;border-left:1px solid rgba(44,55,80,.7)}
+
+.btn{
+  font-family:var(--f-disp);font-weight:600;font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  padding:7px 13px;background:var(--plate);color:var(--bone);
+  clip-path:var(--chamfer);transition:background .12s ease,color .12s ease;
+}
+.btn:hover:not(:disabled){background:var(--plate-hi)}
+.btn.hot{background:var(--solar);color:#12060A}
+.btn.hot:hover:not(:disabled){background:#FFA25E}
+.btn:disabled{opacity:.35}
+.btn.ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--rail)}
+.btn.ghost:hover:not(:disabled){background:var(--plate)}
+
+/* ---------- stage ---------- */
+.stage{display:grid;grid-template-columns:296px minmax(0,1fr) 322px;gap:10px;flex:1;min-height:0}
+
+.panel{background:var(--hull);border:1px solid var(--rail);box-shadow:inset 0 1px 0 var(--edge);display:flex;flex-direction:column;min-height:0;position:relative}
+.panel-hd{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;flex:none;
+  border-bottom:1px solid var(--rail);background:linear-gradient(180deg,var(--plate),transparent)
+}
+.panel-hd h2{font-family:var(--f-disp);font-size:11.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;margin:0}
+.panel-hd .tag{font-family:var(--f-mono);font-size:9.5px;color:var(--dim);letter-spacing:.14em;margin-left:auto;text-transform:uppercase}
+.panel-bd{overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:var(--rail) transparent}
+.panel-bd::-webkit-scrollbar{width:9px}
+.panel-bd::-webkit-scrollbar-thumb{background:var(--rail)}
+.panel-bd::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- fireteam ---------- */
+.buybar{display:flex;gap:2px;padding:7px 8px;border-bottom:1px solid var(--rail);flex:none}
+.buybar button{
+  flex:1;font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;padding:5px 0;
+  background:var(--plate);color:var(--ash);transition:.12s
+}
+.buybar button[aria-pressed="true"]{background:var(--solar);color:#12060A;font-weight:500}
+
+.unit{display:grid;grid-template-columns:34px 1fr auto;gap:9px;padding:9px 10px;border-bottom:1px solid rgba(44,55,80,.5);align-items:center;width:100%;text-align:left;transition:background .12s}
+.unit:hover:not(:disabled){background:rgba(34,44,64,.55)}
+.unit:disabled{opacity:.45}
+.unit .sig{width:34px;height:34px;display:grid;place-items:center;background:var(--plate);clip-path:var(--chamfer)}
+.unit .sig svg{width:19px;height:19px}
+.unit .nm{font-family:var(--f-disp);font-size:12.5px;font-weight:600;letter-spacing:.04em;display:flex;align-items:baseline;gap:6px}
+.unit .lv{font-family:var(--f-mono);font-size:10px;color:var(--solar)}
+.unit .sub{font-family:var(--f-mono);font-size:9.5px;color:var(--dim);letter-spacing:.02em}
+.unit .cost{font-family:var(--f-disp);font-size:11.5px;font-weight:600;color:var(--glimmer);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.unit .cost em{display:block;font-family:var(--f-mono);font-style:normal;font-size:9px;color:var(--dim);letter-spacing:.1em}
+.unit.locked .nm,.unit.locked .sub{color:var(--dim)}
+.unit.afford .cost{color:var(--ok)}
+
+.upg{display:flex;gap:5px;padding:0 10px 9px 53px;flex-wrap:wrap;margin-top:-4px}
+.upg button{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.06em;padding:3px 7px;
+  background:rgba(255,138,61,.13);color:var(--solar);box-shadow:inset 0 0 0 1px rgba(255,138,61,.3)
+}
+.upg button:hover:not(:disabled){background:rgba(255,138,61,.26)}
+.upg button:disabled{background:rgba(93,104,127,.12);color:var(--dim);box-shadow:inset 0 0 0 1px rgba(93,104,127,.25)}
+
+/* ---------- combat ---------- */
+.combat{display:flex;flex-direction:column;gap:10px;min-height:0}
+
+.zonebar{display:flex;align-items:center;gap:12px;background:var(--hull);border:1px solid var(--rail);border-left:3px solid var(--faction);box-shadow:inset 0 1px 0 var(--edge);padding:9px 14px;flex:none;transition:border-color 1.2s ease}
+.zonebar .sector{font-family:var(--f-disp);font-size:19px;font-weight:700;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.zonebar .sector em{font-style:normal;color:var(--dim);font-size:11px;letter-spacing:.2em;display:block;font-family:var(--f-mono)}
+.zonebar .loc{flex:1;min-width:0}
+.zonebar .loc b{font-family:var(--f-disp);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;display:block}
+.zonebar .loc span{font-family:var(--f-mono);font-size:10px;color:var(--ash);letter-spacing:.06em}
+.pips{display:flex;gap:3px}
+.pip{width:11px;height:5px;background:var(--rail);transform:skewX(-20deg)}
+.pip.done{background:var(--solar)}
+.pip.boss{background:var(--bad);width:16px}
+
+.viewport{
+  position:relative;flex:1;min-height:230px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;overflow:hidden;
+  background:
+    radial-gradient(58% 54% at 50% 44%,color-mix(in srgb,var(--faction) 20%,transparent),transparent 72%),
+    radial-gradient(120% 80% at 50% 118%,rgba(216,68,26,.09),transparent 62%),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.016) 0 1px,transparent 1px 3px),
+    linear-gradient(180deg,#1B1719,var(--hull));
+  box-shadow:inset 0 0 90px rgba(0,0,0,.6), inset 0 1px 0 var(--edge);
+  border:1px solid var(--rail);cursor:crosshair;user-select:none;padding:18px;
+  transition:background 1.2s ease;
+}
+.viewport::before,.viewport::after{
+  content:"";position:absolute;width:26px;height:26px;border:1px solid var(--solar);opacity:.55;pointer-events:none
+}
+.viewport::before{top:9px;left:9px;border-right:0;border-bottom:0}
+.viewport::after{bottom:9px;right:9px;border-left:0;border-top:0}
+.vp-corner{position:absolute;width:26px;height:26px;border:1px solid var(--solar);opacity:.55;pointer-events:none}
+.vp-corner.tr{top:9px;right:9px;border-left:0;border-bottom:0}
+.vp-corner.bl{bottom:9px;left:9px;border-right:0;border-top:0}
+
+.enemy{display:flex;flex-direction:column;align-items:center;gap:9px;pointer-events:none;transition:transform .07s ease-out}
+.enemy.hit{transform:translateY(2px) scale(.975)}
+.enemy .glyph{width:132px;height:132px;filter:drop-shadow(0 0 22px currentColor)}
+.enemy .glyph svg{width:100%;height:100%}
+.enemy .rank{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--dim)}
+.enemy .name{font-family:var(--f-disp);font-size:20px;font-weight:600;letter-spacing:.05em;text-align:center;text-wrap:balance}
+.enemy.boss .name{font-size:24px;color:var(--bad)}
+
+.hpwrap{width:min(560px,94%);pointer-events:none}
+.hpbar{height:13px;background:var(--plate);position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px var(--rail)}
+.hpfill{position:absolute;inset:0;transform-origin:left;background:linear-gradient(90deg,color-mix(in srgb,var(--faction) 42%,#141012),var(--faction));transition:transform .08s linear}
+.enemy-boss .hpfill,.hpbar.boss .hpfill{background:linear-gradient(90deg,#6E1B18,var(--bad))}
+.hpmeta{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:10.5px;color:var(--ash);margin-top:4px;font-variant-numeric:tabular-nums}
+.hpmeta .timer{color:var(--warn)}
+.hpmeta .timer.low{color:var(--bad)}
+
+.dmg{position:absolute;font-family:var(--f-disp);font-weight:700;font-size:16px;pointer-events:none;transform:translate(-50%,0);animation:float 900ms ease-out forwards;text-shadow:0 2px 8px rgba(0,0,0,.7);font-variant-numeric:tabular-nums}
+.dmg.crit{font-size:23px;color:var(--gold)}
+.dmg.abil{color:var(--arc);font-size:19px}
+@keyframes float{
+  0%{opacity:0;transform:translate(-50%,6px) scale(.8)}
+  14%{opacity:1;transform:translate(-50%,-6px) scale(1.06)}
+  100%{opacity:0;transform:translate(-50%,-78px) scale(.96)}
+}
+.flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(60% 60% at 50% 50%,currentColor,transparent 70%)}
+.flash.go{animation:fl 520ms ease-out}
+@keyframes fl{0%{opacity:.5}100%{opacity:0}}
+
+/* ability bar */
+.abilities{display:grid;grid-template-columns:repeat(4,1fr) 158px;gap:6px;flex:none}
+.ab{position:relative;overflow:hidden;background:var(--hull);border:1px solid var(--rail);padding:9px 11px;text-align:left;transition:border-color .12s}
+.ab:hover:not(:disabled){border-color:var(--solar)}
+.ab .abn{font-family:var(--f-disp);font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;display:flex;gap:6px;align-items:center}
+.ab .key{font-family:var(--f-mono);font-size:9px;padding:1px 4px;background:var(--plate);color:var(--ash);letter-spacing:.05em}
+.ab .abd{font-family:var(--f-mono);font-size:9.5px;color:var(--dim);letter-spacing:.02em;margin-top:2px}
+.ab .cool{position:absolute;inset:0;background:rgba(8,11,18,.78);transform-origin:right;pointer-events:none}
+.ab .cdtext{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-family:var(--f-disp);font-size:17px;font-weight:700;color:var(--ash);font-variant-numeric:tabular-nums}
+.ab.ready{border-color:rgba(255,138,61,.55)}
+.ab.super{background:linear-gradient(120deg,rgba(255,138,61,.12),var(--hull))}
+.ab.super.charged{border-color:var(--solar);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,138,61,0)}50%{box-shadow:0 0 16px 0 rgba(255,138,61,.4)}}
+.superbar{height:4px;background:var(--plate);margin-top:6px;position:relative;overflow:hidden}
+.superbar i{position:absolute;inset:0;background:var(--solar);transform-origin:left;transition:transform .15s linear}
+
+.ticker{flex:none;height:52px;overflow:hidden;background:var(--hull);border:1px solid var(--rail);padding:5px 12px;display:flex;flex-direction:column-reverse;justify-content:flex-end}
+.ticker p{margin:0;font-family:var(--f-mono);font-size:10.5px;color:var(--ash);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.55}
+.ticker p:first-child{color:var(--bone)}
+.ticker b{font-weight:400;color:var(--solar)}
+
+/* ---------- gear ---------- */
+.lightplate{padding:12px;border-bottom:1px solid var(--rail);display:flex;align-items:center;gap:12px;flex:none}
+.lightnum{font-family:var(--f-disp);font-size:34px;font-weight:700;line-height:.95;font-variant-numeric:tabular-nums;color:var(--gold);text-shadow:0 0 24px rgba(255,196,107,.3)}
+.lightplate .meta span{display:block;font-family:var(--f-mono);font-size:9px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+.lightplate .meta b{font-family:var(--f-disp);font-size:12px;font-weight:600;color:var(--solar);letter-spacing:.04em}
+
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rail);border-bottom:1px solid var(--rail)}
+.slot{background:var(--hull);padding:7px 9px;min-height:50px;text-align:left;display:flex;flex-direction:column;gap:1px;transition:background .12s;border-left:2px solid transparent}
+.slot:hover{background:var(--plate)}
+.slot .sl{font-family:var(--f-mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.slot .it{font-family:var(--f-disp);font-size:11.5px;font-weight:600;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .pw{font-family:var(--f-mono);font-size:10px;color:var(--ash);font-variant-numeric:tabular-nums}
+.slot.empty .it{color:var(--dim);font-weight:500}
+
+.pmhd{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--rail);flex:none}
+.pmhd h3{font-family:var(--f-disp);font-size:10.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;margin:0}
+.pmhd .ct{font-family:var(--f-mono);font-size:9.5px;color:var(--dim);margin-left:auto}
+.pmhd button{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;padding:3px 7px;background:var(--plate);color:var(--ash)}
+.pmhd button:hover{background:var(--plate-hi);color:var(--bone)}
+
+.drop{display:grid;grid-template-columns:26px 1fr auto;gap:9px;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(44,55,80,.5);width:100%;text-align:left;border-left:2px solid transparent;transition:background .12s;animation:slidein .32s ease-out}
+@keyframes slidein{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.drop:hover{background:var(--plate)}
+.drop .eng{width:26px;height:26px}
+.drop .dn{font-family:var(--f-disp);font-size:11.5px;font-weight:600;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drop .dt{font-family:var(--f-mono);font-size:9px;color:var(--dim);letter-spacing:.04em;text-transform:uppercase}
+.drop .dp{font-family:var(--f-disp);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.drop .dp em{font-style:normal;font-size:9.5px;font-family:var(--f-mono);display:block;text-align:right}
+.up{color:var(--ok)} .down{color:var(--dim)}
+.empty-note{padding:22px 14px;text-align:center;font-family:var(--f-mono);font-size:10px;color:var(--dim);letter-spacing:.1em;line-height:1.9}
+
+/* ---------- modal ---------- */
+.scrim{position:fixed;inset:0;background:rgba(4,6,11,.82);display:grid;place-items:center;padding:20px;z-index:50;backdrop-filter:blur(3px)}
+.scrim[hidden]{display:none}
+.sheet{background:var(--hull);border:1px solid var(--rail);width:min(560px,100%);max-height:88dvh;overflow-y:auto;position:relative}
+.sheet.wide{width:min(760px,100%)}
+.sheet-hd{padding:14px 18px;border-bottom:1px solid var(--rail);display:flex;align-items:center;gap:12px;background:linear-gradient(180deg,var(--plate),transparent)}
+.sheet-hd h2{font-family:var(--f-disp);font-size:15px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin:0}
+.sheet-hd .x{margin-left:auto;font-family:var(--f-mono);font-size:15px;color:var(--ash);padding:2px 8px}
+.sheet-hd .x:hover{color:var(--bone)}
+.sheet-bd{padding:18px}
+.sheet p{color:var(--ash);margin:0 0 12px;max-width:62ch}
+
+.itemcard{display:flex;gap:14px;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid var(--rail);margin-bottom:14px}
+.itemcard .big{width:58px;height:58px;flex:none}
+.itemcard h3{font-family:var(--f-disp);font-size:19px;font-weight:700;letter-spacing:.04em;margin:0}
+.itemcard .type{font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ash)}
+.itemcard .pow{font-family:var(--f-disp);font-size:27px;font-weight:700;margin-left:auto;text-align:right;line-height:1;font-variant-numeric:tabular-nums}
+.itemcard .pow em{display:block;font-family:var(--f-mono);font-style:normal;font-size:9px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+.perkrow{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(44,55,80,.45)}
+.perkrow b{font-family:var(--f-disp);font-size:12.5px;font-weight:600;letter-spacing:.05em;min-width:150px}
+.perkrow span{font-family:var(--f-mono);font-size:11px;color:var(--solar)}
+.cmp{font-family:var(--f-mono);font-size:10.5px;color:var(--ash);margin:12px 0 0;letter-spacing:.02em}
+.sheet-ft{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--rail)}
+.sheet-ft .btn{flex:1;text-align:center;padding:10px}
+
+.shop{display:grid;gap:1px;background:var(--rail)}
+.shoprow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;background:var(--hull);padding:11px 14px;text-align:left;width:100%;transition:background .12s}
+.shoprow:hover:not(:disabled){background:var(--plate)}
+.shoprow:disabled{opacity:.4}
+.shoprow b{font-family:var(--f-disp);font-size:13px;font-weight:600;letter-spacing:.05em;display:block}
+.shoprow span{font-family:var(--f-mono);font-size:10.5px;color:var(--ash)}
+.shoprow .rk{font-family:var(--f-mono);font-size:10px;color:var(--dim);letter-spacing:.1em}
+.shoprow .pr{font-family:var(--f-disp);font-size:14px;font-weight:600;color:var(--r3);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.subgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.subcard{padding:14px;text-align:left;background:var(--plate);box-shadow:inset 0 0 0 1px transparent;transition:.14s;clip-path:var(--chamfer)}
+.subcard:hover{background:var(--plate-hi)}
+.subcard[aria-pressed="true"]{box-shadow:inset 0 0 0 1px currentColor;background:var(--plate-hi)}
+.subcard svg{width:26px;height:26px;margin-bottom:6px}
+.subcard b{display:block;font-family:var(--f-disp);font-size:13.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.subcard span{display:block;font-family:var(--f-mono);font-size:10px;color:var(--ash);margin-top:4px;line-height:1.5}
+
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rail);margin-top:6px}
+.statgrid div{background:var(--hull);padding:9px 12px}
+.statgrid span{display:block;font-family:var(--f-mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.statgrid b{font-family:var(--f-disp);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+
+.tabs{display:none;gap:2px}
+.tabs button{flex:1;font-family:var(--f-disp);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;padding:9px;background:var(--hull);color:var(--ash);border:1px solid var(--rail)}
+.tabs button[aria-pressed="true"]{background:var(--solar);color:#12060A;border-color:var(--solar)}
+
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;
+  background:var(--plate);border:1px solid var(--solar);padding:11px 20px;
+  font-family:var(--f-disp);font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;
+  clip-path:var(--chamfer);animation:toastin .3s ease-out
+}
+@keyframes toastin{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+
+@media(max-width:1180px){
+  .stage{grid-template-columns:1fr;grid-template-areas:"tabs" "combat" "side"}
+  .tabs{display:flex;grid-area:tabs}
+  .combat{grid-area:combat;min-height:60dvh}
+  .panel{grid-area:side;max-height:60dvh}
+  .panel[hidden]{display:none}
+  .app{min-height:auto}
+}
+@media(max-width:620px){
+  .abilities{grid-template-columns:1fr 1fr}
+  .ab.super{grid-column:span 2}
+  .ro{padding:7px 12px;min-width:74px}
+  .crest small{display:none}
+  .enemy .glyph{width:100px;height:100px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+</style>
+
+<div class="app">
+  <header class="hud">
+    <div class="crest">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#EDE8DC" stroke-width="1.4" aria-hidden="true">
+        <path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M12 7 7.5 9.5v5L12 17l4.5-2.5v-5z" fill="#FF8A3D" stroke="none"/>
+      </svg>
+      <div><h1>Glimmer Grind</h1><small>Idle Vanguard Ops</small></div>
+    </div>
+    <div class="readouts">
+      <div class="ro glim"><b id="ro-glimmer">0</b><span>Glimmer</span></div>
+      <div class="ro dps"><b id="ro-dps">0</b><span>Fireteam DPS</span></div>
+      <div class="ro"><b id="ro-click">1</b><span>Per Shot</span></div>
+      <div class="ro light"><b id="ro-light">0</b><span>Light</span></div>
+      <div class="ro shard"><b id="ro-shards">0</b><span>Shards</span></div>
+    </div>
+    <div class="hud-actions">
+      <button class="btn ghost" id="btn-subclass">Subclass</button>
+      <button class="btn ghost" id="btn-reset">Reset Light</button>
+      <button class="btn ghost" id="btn-menu">Menu</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="tabs" role="tablist">
+      <button id="tab-fireteam" aria-pressed="true">Fireteam</button>
+      <button id="tab-gear" aria-pressed="false">Gear</button>
+    </div>
+
+    <!-- FIRETEAM -->
+    <section class="panel" id="p-fireteam">
+      <div class="panel-hd"><h2>Fireteam</h2><span class="tag" id="ft-count">0 / 12</span></div>
+      <div class="buybar" role="group" aria-label="Purchase amount">
+        <button data-buy="1" aria-pressed="true">×1</button>
+        <button data-buy="10" aria-pressed="false">×10</button>
+        <button data-buy="100" aria-pressed="false">×100</button>
+        <button data-buy="max" aria-pressed="false">MAX</button>
+      </div>
+      <div class="panel-bd" id="ft-list"></div>
+    </section>
+
+    <!-- COMBAT -->
+    <section class="combat">
+      <div class="zonebar">
+        <div class="sector"><span id="z-num">1</span><em>Sector</em></div>
+        <div class="loc"><b id="z-area">Cosmodrome</b><span id="z-faction">Fallen — House of Dusk</span></div>
+        <div class="pips" id="z-pips"></div>
+        <button class="btn ghost" id="btn-auto" aria-pressed="true">Auto ▸</button>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <span class="vp-corner tr"></span><span class="vp-corner bl"></span>
+        <div class="flash" id="flash"></div>
+        <div class="enemy" id="enemy">
+          <div class="glyph" id="e-glyph"></div>
+          <div class="rank" id="e-rank">Dreg</div>
+          <div class="name" id="e-name">Splinter Dreg</div>
+        </div>
+        <div class="hpwrap">
+          <div class="hpbar" id="hpbar"><div class="hpfill" id="hpfill"></div></div>
+          <div class="hpmeta">
+            <span id="hp-text">10 / 10</span>
+            <span class="timer" id="boss-timer"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="abilities">
+        <button class="ab" id="ab-grenade"><div class="cool"></div><div class="abn"><span class="key">Q</span><span class="lbl">Grenade</span></div><div class="abd"></div><div class="cdtext"></div></button>
+        <button class="ab" id="ab-melee"><div class="cool"></div><div class="abn"><span class="key">E</span><span class="lbl">Melee</span></div><div class="abd"></div><div class="cdtext"></div></button>
+        <button class="ab" id="ab-class"><div class="cool"></div><div class="abn"><span class="key">C</span><span class="lbl">Class</span></div><div class="abd"></div><div class="cdtext"></div></button>
+        <button class="ab" id="ab-fire"><div class="abn"><span class="key">Space</span><span class="lbl">Fire</span></div><div class="abd">Land a shot on the target</div></button>
+        <button class="ab super" id="ab-super"><div class="abn"><span class="key">R</span><span class="lbl">Super</span></div><div class="abd" id="super-d">Charging</div><div class="superbar"><i id="super-fill"></i></div></button>
+      </div>
+
+      <div class="ticker" id="ticker"></div>
+    </section>
+
+    <!-- GEAR -->
+    <section class="panel" id="p-gear" hidden>
+      <div class="panel-hd"><h2>Loadout</h2><span class="tag" id="gear-tag">0 / 8 equipped</span></div>
+      <div class="lightplate">
+        <div class="lightnum" id="light-big">0</div>
+        <div class="meta">
+          <span>Light Level</span>
+          <b id="light-mult">×1.00 damage</b>
+        </div>
+      </div>
+      <div class="slots" id="slots"></div>
+      <div class="pmhd">
+        <h3>Postmaster</h3>
+        <span class="ct" id="pm-ct">0</span>
+        <button id="btn-dismantle">Dismantle All</button>
+      </div>
+      <div class="panel-bd" id="pm-list"></div>
+    </section>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden><div class="sheet" id="sheet"></div></div>
+
+<script>
+"use strict";
+
+/* ============================ data ============================ */
+
+const AREAS = [
+  {n:'Cosmodrome',    f:'Fallen',  sub:'House of Dusk',      c:'#6E9BD8'},
+  {n:'European Dead Zone', f:'Cabal', sub:'Red Legion Remnant', c:'#E0574F'},
+  {n:'Luna',          f:'Hive',    sub:'Hidden Swarm',       c:'#9FD16A'},
+  {n:'Nessus',        f:'Vex',     sub:'Sol Divisive',       c:'#D9C24F'},
+  {n:'The Dreaming City', f:'Taken', sub:'Riven’s Brood', c:'#B36BF2'},
+  {n:'Tangled Shore', f:'Scorn',   sub:'Barons of the Reef', c:'#E0709A'},
+  {n:'Europa',        f:'Fallen',  sub:'House of Salvation', c:'#7FD8FF'},
+  {n:'Neomuna',       f:'Vex',     sub:'Radial Mind',        c:'#7A7BF0'}
+];
+
+const GLYPHS = {
+  Fallen:'<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><path d="M50 6 82 30v40L50 94 18 70V30z"/><path d="M50 22v56M50 22 34 40M50 22 66 40M50 78 30 62M50 78 70 62" stroke-width="4"/></svg>',
+  Cabal:'<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 14h56l14 22-14 22H22L8 36z"/><path d="M30 62h40l10 24H20z"/><circle cx="50" cy="36" r="9" fill="currentColor" stroke="none"/></svg>',
+  Hive:'<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><path d="M50 4 92 50 50 96 8 50z"/><path d="M50 24 74 50 50 76 26 50z" stroke-width="4"/><path d="M50 40v20M40 50h20" stroke-width="5"/></svg>',
+  Vex:'<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><path d="M50 8 86 29v42L50 92 14 71V29z"/><circle cx="50" cy="50" r="20"/><circle cx="50" cy="50" r="7" fill="currentColor" stroke="none"/><path d="M50 8v21M50 71v21M14 29l18 11M86 29 68 40"/></svg>',
+  Taken:'<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><path d="M50 4 78 50 50 96 22 50z"/><path d="M50 30 62 50 50 70 38 50z" fill="currentColor" stroke="none"/><path d="M8 50h20M72 50h20M50 4v14M50 82v14" stroke-width="4"/></svg>',
+  Scorn:'<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><path d="M50 6 74 26 66 54 50 94 34 54 26 26z"/><path d="M6 40l20 6M94 40l-20 6M50 40v34" stroke-width="4"/></svg>'
+};
+
+const ENEMIES = {
+  Fallen:['Dreg','Vandal','Marauder','Captain','Shank','Servitor'],
+  Cabal:['Legionary','Psion','Incendior','Centurion','Gladiator','Colossus'],
+  Hive:['Thrall','Acolyte','Cursed Thrall','Knight','Wizard','Ogre'],
+  Vex:['Goblin','Harpy','Hobgoblin','Minotaur','Cyclops','Hydra'],
+  Taken:['Taken Thrall','Taken Psion','Taken Vandal','Taken Phalanx','Taken Knight','Taken Centurion'],
+  Scorn:['Screeb','Stalker','Ravager','Abomination','Chieftain','Wraith']
+};
+
+const BOSS_NAMES = {
+  Fallen:['Vokaal','Rekkis','Draksis','Yavik','Skaarn','Thaviks'],
+  Cabal:['Bracus Val','Thumos','Gaunt','Ozletc','Karrun','Mekris'],
+  Hive:['Alzok','Kranox','Hashladun','Navota','Zulmak','Xortal'],
+  Vex:['Praetorian','Zydron','Sekrion','Qodron','Brakion','Hezen'],
+  Taken:['Kelgorath','Nurizel','Tha’lam','Ur Haask','Malok','Sedia'],
+  Scorn:['Hiraks','Elykris','Kaniks','Reksis','Pirrha','Yaviks']
+};
+
+const BOSS_TITLES = {
+  Fallen:['Baron of Splinters','the Splicer Priest','Kell of the Dusk','Archon Reborn'],
+  Cabal:['the Siege Engine','Blood Guard Primus','the Unbroken','War Beast Handler'],
+  Hive:['the Bone Collector','Wizard of Sorrow','Deathsinger’s Voice','the Blighted'],
+  Vex:['Axis Mind','the Gate Lord','Precursor Construct','Undying Mind'],
+  Taken:['the Cursed','Blight Herald','the Ascendant','Voice of Riven'],
+  Scorn:['the Rider','Mad Bomber','Machinist of Bone','the Rifleman']
+};
+
+const GUARDIANS = [
+  {n:'Ghost Shell',    r:'Little Light',    cost:8,      dps:0.6,  g:'shell'},
+  {n:'New Light',      r:'Rookie Guardian', cost:60,     dps:5,    g:'hunter'},
+  {n:'Gunslinger',     r:'Solar Hunter',    cost:520,    dps:32,   g:'hunter'},
+  {n:'Sentinel',       r:'Void Titan',      cost:4200,   dps:190,  g:'titan'},
+  {n:'Stormcaller',    r:'Arc Warlock',     cost:2.6e4,  dps:940,  g:'warlock'},
+  {n:'Nightstalker',   r:'Void Hunter',     cost:1.6e5,  dps:5000,  g:'hunter'},
+  {n:'Dawnblade',      r:'Solar Warlock',   cost:1.1e6,  dps:2.7e4, g:'warlock'},
+  {n:'Sunbreaker',     r:'Solar Titan',     cost:8e6,    dps:1.5e5, g:'titan'},
+  {n:'Arcstrider',     r:'Arc Hunter',      cost:6.5e7,  dps:9e5,   g:'hunter'},
+  {n:'Voidwalker',     r:'Void Warlock',    cost:5.5e8,  dps:5.5e6, g:'warlock'},
+  {n:'Vanguard Scout', r:'Veteran Operator',cost:5e9,    dps:3.4e7, g:'titan'},
+  {n:'Iron Lord',      r:'Risen Legend',    cost:5e10,   dps:2.2e8, g:'shell'}
+];
+
+const CLASS_GLYPH = {
+  titan:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3 7v6c0 4 4 7 9 9 5-2 9-5 9-9V7z" opacity=".28"/><path d="M12 5 6 8.5V13c0 2.6 2.6 4.7 6 6 3.4-1.3 6-3.4 6-6V8.5z"/></svg>',
+  hunter:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 20h20z" opacity=".28"/><path d="M12 7 6 18h12z"/></svg>',
+  warlock:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 12l10 10 10-10z" opacity=".28"/><path d="M12 6 6 12l6 6 6-6z"/></svg>',
+  shell:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 4 8v8l8 5 8-5V8z" opacity=".28"/><circle cx="12" cy="12" r="3.5"/></svg>'
+};
+
+const SUBCLASSES = {
+  solar:{n:'Solar',c:'#FF8A3D',gren:'Fusion Grenade',melee:'Knife Trick',cls:'Healing Rift',sup:'Golden Gun',
+    perk:'Radiant: +30% weapon damage',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4M4.2 4.2 7 7M17 17l2.8 2.8M19.8 4.2 17 7M7 17l-2.8 2.8"/></svg>'},
+  arc:{n:'Arc',c:'#7FD8FF',gren:'Pulse Grenade',melee:'Ball Lightning',cls:'Towering Barricade',sup:'Fists of Havoc',
+    perk:'Amplified: +2 auto-shots per second',
+    icon:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 13h5l-2 9 10-12h-5z"/></svg>'},
+  void:{n:'Void',c:'#A45BE8',gren:'Vortex Grenade',melee:'Shield Bash',cls:'Marksman Dodge',sup:'Nova Bomb',
+    perk:'Devour: +45% glimmer from kills',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4" fill="currentColor"/></svg>'}
+};
+
+const SLOTS = [
+  {k:'kinetic', n:'Kinetic',   t:'weapon'},
+  {k:'energy',  n:'Energy',    t:'weapon'},
+  {k:'power',   n:'Power',     t:'weapon'},
+  {k:'helmet',  n:'Helmet',    t:'armor'},
+  {k:'arms',    n:'Gauntlets', t:'armor'},
+  {k:'chest',   n:'Chest',     t:'armor'},
+  {k:'legs',    n:'Legs',      t:'armor'},
+  {k:'mark',    n:'Class Item',t:'armor'}
+];
+
+const RARITY = [
+  {n:'Common',    c:'var(--r0)', hex:'#B5AEA6', w:44, perks:1, mult:1.0,  pow:0,  sh:2},
+  {n:'Uncommon',  c:'var(--r1)', hex:'#6FBE5A', w:29, perks:1, mult:1.45, pow:4,  sh:5},
+  {n:'Rare',      c:'var(--r2)', hex:'#5A8FE0', w:18, perks:2, mult:1.95, pow:9,  sh:12},
+  {n:'Legendary', c:'var(--r3)', hex:'#B366E8', w:7.5,perks:2, mult:2.7,  pow:16, sh:30},
+  {n:'Exotic',    c:'var(--r4)', hex:'#EFD84E', w:1.5,perks:3, mult:3.8,  pow:26, sh:80}
+];
+
+const PERKS = {
+  weapon:[
+    {k:'click',    n:'Rangefinder',   d:'weapon damage',     base:7,   suf:'%'},
+    {k:'critC',    n:'Outlaw',        d:'critical chance',   base:1.8, suf:'%'},
+    {k:'critD',    n:'Firefly',       d:'critical damage',   base:16,  suf:'%'},
+    {k:'boss',     n:'Vorpal Weapon', d:'boss damage',       base:11,  suf:'%'},
+    {k:'ability',  n:'Demolitionist', d:'ability damage',    base:12,  suf:'%'}
+  ],
+  armor:[
+    {k:'team',     n:'Bountiful Wells', d:'fireteam damage', base:6,   suf:'%'},
+    {k:'glimmer',  n:'Reaper',          d:'glimmer',         base:10,  suf:'%'},
+    {k:'super',    n:'Ashes to Assets', d:'super energy',    base:13,  suf:'%'},
+    {k:'cdr',      n:'Distribution',    d:'ability cooldown',base:4,   suf:'%', neg:true},
+    {k:'luck',     n:'Prime Focus',     d:'rare drop weight',base:7,   suf:'%'}
+  ]
+};
+
+const WEAPON_TYPES = {
+  kinetic:['Hand Cannon','Pulse Rifle','Scout Rifle','Auto Rifle','Sidearm','Combat Bow'],
+  energy:['Submachine Gun','Fusion Rifle','Trace Rifle','Glaive','Shotgun','Sniper Rifle'],
+  power:['Rocket Launcher','Linear Fusion','Sword','Machine Gun','Grenade Launcher']
+};
+const ADJ = ['Ashen','Null','Iron','Solemn','Radiant','Gilded','Umbral','Severed','Quiet','Ninth','Tarnished','Distant','Hollow','Waking','Sunless','Vagrant','Steadfast','Crooked'];
+const NOUN = ['Verdict','Refrain','Compass','Vow','Reprisal','Doctrine','Lament','Ascension','Requiem','Bargain','Testimony','Curfew','Threnody','Reverie'];
+const EPITHET = ['the Ninth Circle','Quiet Stars','Ashen Wake','the Long Watch','Broken Suns','the Undying','Cold Dawn','Silent Fathoms','the Deep Stone','Fading Light'];
+const ARMOR_WORD = {helmet:['Helm','Mask','Cowl','Visor'],arms:['Gauntlets','Grips','Gloves','Bracers'],chest:['Plate','Vest','Robes','Harness'],legs:['Greaves','Strides','Boots','Treads'],mark:['Mark','Cloak','Bond','Sigil']};
+
+const SHARD_PERKS = [
+  {id:'attune',   n:'Light Attunement',  d:'+12% all damage per rank',        max:50, cost:r=>1+r},
+  {id:'marksman', n:'Marksman Protocol', d:'+30% weapon damage per rank',     max:25, cost:r=>1+r*2},
+  {id:'contracts',n:'Glimmer Contracts', d:'+25% glimmer per rank',           max:25, cost:r=>1+r*2},
+  {id:'ordnance', n:'Ordnance Tuning',   d:'-4% ability cooldowns per rank',  max:10, cost:r=>2+r*3},
+  {id:'focus',    n:'Prime Engram Focus',d:'+9% rare drop weight per rank',   max:10, cost:r=>3+r*4},
+  {id:'auto',     n:'Auto-Loader',       d:'+1 auto-shot per second per rank',max:10, cost:r=>5+r*6},
+  {id:'sparrow',  n:'Sparrow Boost',     d:'Start 5 sectors higher per rank', max:15, cost:r=>4+r*5}
+];
+
+const UPG_TIERS = [10,25,50,100,175,300];
+const SAVE_KEY = 'glimmer-grind-v1';
+
+/* ============================ state ============================ */
+
+let S;
+function freshRun(shardPerks, shards, stats, best){
+  const start = 1 + 5*((shardPerks&&shardPerks.sparrow)||0);
+  return {
+    zone:start, kills:0, glimmer:0, shards:shards||0,
+    perks:shardPerks||{}, stats:stats||{clicks:0,kills:0,drops:0,bosses:0,resets:0,dmg:0}, best:best||start,
+    runBest:start,
+    team:GUARDIANS.map(()=>({lvl:0,upg:0})),
+    gear:{}, pm:[],
+    sub:(S&&S.sub)||'solar',
+    superE:0, cd:{grenade:0,melee:0,cls:0}, buffs:[],
+    auto:true, buy:1, seen:0, last:Date.now()
+  };
+}
+
+/* ============================ helpers ============================ */
+
+const SUF=['','K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','Dc','Ud','Dd'];
+function fmt(n){
+  if(!isFinite(n)) return '∞';
+  if(n<0) return '-'+fmt(-n);
+  if(n<1000) return n<10 ? (Math.round(n*10)/10).toString() : Math.floor(n).toString();
+  let t=0;
+  while(n>=1000 && t<SUF.length-1){ n/=1000; t++; }
+  if(n>=1000) return n.toExponential(2);
+  return (n<10?n.toFixed(2):n<100?n.toFixed(1):Math.floor(n).toString())+SUF[t];
+}
+function fmtTime(s){ const m=Math.floor(s/60); return m>0 ? m+'m '+Math.floor(s%60)+'s' : Math.floor(s)+'s'; }
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function pick(arr,r){ return arr[Math.floor((r?r():Math.random())*arr.length)]; }
+const $ = s=>document.querySelector(s);
+
+/* ============================ derived ============================ */
+
+function areaFor(z){ return AREAS[Math.floor((z-1)/5)%AREAS.length]; }
+function isBossZone(z){ return z%5===0; }
+function enemyMaxHp(z,boss){
+  const base = 10*(z-1+Math.pow(1.55,z-1));
+  return base*(boss?9:1);
+}
+function glimmerFor(z,boss){
+  return enemyMaxHp(z,false)/14*(boss?7:1)*glimmerMult();
+}
+function unitCost(i,owned,count){
+  const g=GUARDIANS[i];
+  return g.cost*Math.pow(1.07,owned)*(Math.pow(1.07,count)-1)/0.07;
+}
+function maxAffordable(i){
+  const g=GUARDIANS[i], owned=S.team[i].lvl;
+  const n = Math.log(S.glimmer*0.07/(g.cost*Math.pow(1.07,owned))+1)/Math.log(1.07);
+  return Math.max(0,Math.floor(n));
+}
+
+function gearStat(k){
+  let v=0;
+  for(const s of SLOTS){ const it=S.gear[s.k]; if(!it) continue; for(const p of it.perks) if(p.k===k) v+=p.v; }
+  return v;
+}
+function light(){
+  let sum=0;
+  for(const s of SLOTS){ const it=S.gear[s.k]; if(it) sum+=it.pow; }
+  return Math.floor(sum/SLOTS.length);
+}
+function lightMult(){ return 1+light()*0.016; }
+function shardRank(id){ return S.perks[id]||0; }
+function globalMult(){
+  let m = lightMult()*(1+0.12*shardRank('attune'));
+  for(const b of S.buffs) if(b.k==='all') m*=b.v;
+  return m;
+}
+function teamDps(){
+  let raw=0;
+  for(let i=0;i<GUARDIANS.length;i++){
+    const u=S.team[i];
+    if(!u.lvl) continue;
+    raw += GUARDIANS[i].dps*u.lvl*Math.pow(2,u.upg);
+  }
+  raw *= 1+gearStat('team')/100;
+  return raw*globalMult();
+}
+function clickDamage(){
+  const base = 2 + teamDps()*(0.055+0.01*shardRank('auto'));
+  let m = (1+gearStat('click')/100)*(1+0.30*shardRank('marksman'));
+  if(S.sub==='solar') m*=1.3;
+  for(const b of S.buffs) if(b.k==='click') m*=b.v;
+  return base*m*globalMult();
+}
+function critChance(){ return Math.min(0.75,0.05+gearStat('critC')/100); }
+function critMult(){ return 2+gearStat('critD')/100; }
+function glimmerMult(){
+  let m=(1+gearStat('glimmer')/100)*(1+0.25*shardRank('contracts'));
+  if(S.sub==='void') m*=1.45;
+  return m;
+}
+function cdrMult(){ return Math.max(0.3, 1-gearStat('cdr')/100-0.04*shardRank('ordnance')); }
+function abilityMult(){ return (1+gearStat('ability')/100); }
+function autoShots(){ return shardRank('auto') + (S.sub==='arc'?2:0); }
+function bossMult(){ return 1+gearStat('boss')/100; }
+function shardsFor(z){ return z<100 ? 0 : Math.floor(Math.pow((z-90)/10,1.8)); }
+
+/* ============================ combat state ============================ */
+
+let E = null;
+function spawn(){
+  const z=S.zone, boss=isBossZone(z) , a=areaFor(z);
+  const rnd=mulberry(z*7919+S.kills*31+(boss?13:0));
+  let name, rank;
+  if(boss){
+    name = pick(BOSS_NAMES[a.f],rnd)+', '+pick(BOSS_TITLES[a.f],rnd);
+    rank = 'Ultra — '+a.f;
+  }else{
+    const base=pick(ENEMIES[a.f],rnd);
+    rank = base;
+    name = pick(['Splinter','Fell','Wretched','Blighted','Rift','Hollow','Ashen','Torn'],rnd)+' '+base;
+  }
+  const hp=enemyMaxHp(z,boss);
+  E={hp:hp,max:hp,boss:boss,name:name,rank:rank,area:a,timer:boss?30:0};
+  renderEnemy();
+}
+
+function damage(amount,kind){
+  if(!E) return;
+  if(E.boss) amount*=bossMult();
+  E.hp-=amount; S.stats.dmg+=amount;
+  if(kind) popDamage(amount,kind);
+  if(E.hp<=0) killEnemy();
+  else renderHp();
+}
+
+function killEnemy(){
+  const z=S.zone, boss=E.boss;
+  const gain=glimmerFor(z,boss);
+  S.glimmer+=gain; S.stats.kills++;
+  S.superE=Math.min(100,S.superE+(boss?22:3.2)*(1+gearStat('super')/100));
+
+  const luck=(gearStat('luck')+9*shardRank('focus'))/100;
+  if(boss || Math.random()<0.14){
+    S.stats.drops++;
+    addDrop(rollItem(z,boss,luck));
+  }
+  if(boss){
+    S.stats.bosses++;
+    log('<b>Sector '+z+'</b> cleared — '+E.name+' down.');
+    advance();
+  }else{
+    S.kills++;
+    if(S.kills>=10){ S.kills=0; advance(); }
+    else spawn();
+  }
+  renderTop(); renderZone();
+}
+
+function advance(){
+  if(!S.auto && isBossZone(S.zone)){ /* still advance after boss */ }
+  S.zone++; S.kills=0;
+  if(S.zone>S.best) S.best=S.zone;
+  if(S.zone>S.runBest) S.runBest=S.zone;
+  const a=areaFor(S.zone);
+  if(S.zone%5===1) log('Transmat to <b>'+a.n+'</b> — '+a.f+' contact.');
+  spawn();
+}
+
+function bossFail(){
+  log('Fireteam wiped. Regrouping at Sector '+S.zone+'.');
+  toast('Wipe — boss reset');
+  spawn();
+}
+
+/* ============================ loot ============================ */
+
+function rollItem(z,boss,luck){
+  const weights=RARITY.map((r,i)=>r.w*(i>=2?1+luck*(i-1):1)*(boss&&i>=3?2.2:1));
+  const total=weights.reduce((a,b)=>a+b,0);
+  let roll=Math.random()*total, ri=0;
+  for(let i=0;i<weights.length;i++){ roll-=weights[i]; if(roll<=0){ ri=i; break; } }
+  const rar=RARITY[ri];
+  const slot=SLOTS[Math.floor(Math.random()*SLOTS.length)];
+  const pow=Math.max(1,Math.round(z*6.4*(0.92+Math.random()*0.2)+rar.pow+(boss?z*0.8:0)));
+
+  const pool=PERKS[slot.t].slice();
+  const perks=[];
+  for(let i=0;i<rar.perks;i++){
+    const p=pool.splice(Math.floor(Math.random()*pool.length),1)[0];
+    if(!p) break;
+    perks.push({k:p.k,n:p.n,d:p.d,suf:p.suf,neg:p.neg,v:Math.round(p.base*rar.mult*(0.8+Math.random()*0.45)*10)/10});
+  }
+  let name,type;
+  if(slot.t==='weapon'){
+    type=pick(WEAPON_TYPES[slot.k]);
+    name=pick(ADJ)+' '+pick(NOUN);
+  }else{
+    type=slot.n;
+    name=pick(ARMOR_WORD[slot.k])+' of '+pick(EPITHET);
+  }
+  return {id:Math.random().toString(36).slice(2,9),slot:slot.k,slotN:slot.n,type:type,name:name,r:ri,pow:pow,perks:perks};
+}
+
+function addDrop(item){
+  S.pm.unshift(item);
+  while(S.pm.length>12){ const x=S.pm.pop(); S.shards+=0; S.glimmer+=RARITY[x.r].sh*S.zone; }
+  if(item.r>=3) log('<b>'+RARITY[item.r].n+'</b> engram decrypted: '+item.name);
+  renderGear();
+}
+
+function equip(item){
+  const old=S.gear[item.slot];
+  S.gear[item.slot]=item;
+  S.pm=S.pm.filter(x=>x.id!==item.id);
+  if(old) S.glimmer+=RARITY[old.r].sh*S.zone;
+  renderGear(); renderTop();
+}
+
+function dismantle(item){
+  S.pm=S.pm.filter(x=>x.id!==item.id);
+  S.glimmer+=RARITY[item.r].sh*S.zone;
+  renderGear(); renderTop();
+}
+
+/* ============================ abilities ============================ */
+
+function fire(x,y){
+  let dmg=clickDamage();
+  const crit=Math.random()<critChance();
+  if(crit) dmg*=critMult();
+  S.stats.clicks++;
+  S.superE=Math.min(100,S.superE+0.25*(1+gearStat('super')/100));
+  lastClickPos=[x,y];
+  damage(dmg,crit?'crit':'hit');
+  hitShake();
+}
+
+function useAbility(kind){
+  const sc=SUBCLASSES[S.sub];
+  if(kind==='super'){
+    if(S.superE<100) return;
+    S.superE=0;
+    const dmg=(teamDps()*45+clickDamage()*60)*abilityMult();
+    damage(dmg,'abil');
+    S.buffs.push({k:'all',v:2.5,t:9,n:sc.sup});
+    flash(sc.c);
+    log('<b>'+sc.sup+'</b> cast — '+fmt(dmg)+' damage, 2.5× for 9s.');
+    toast(sc.sup);
+  }else if(kind==='grenade'){
+    if(S.cd.grenade>0) return;
+    S.cd.grenade=18*cdrMult();
+    const dmg=(teamDps()*11+clickDamage()*22)*abilityMult();
+    damage(dmg,'abil'); flash(sc.c);
+  }else if(kind==='melee'){
+    if(S.cd.melee>0) return;
+    S.cd.melee=10*cdrMult();
+    const dmg=(teamDps()*4.5+clickDamage()*11)*abilityMult();
+    damage(dmg,'abil');
+  }else if(kind==='cls'){
+    if(S.cd.cls>0) return;
+    S.cd.cls=32*cdrMult();
+    S.buffs.push({k:'click',v:2.2,t:14,n:sc.cls});
+    flash(sc.c);
+    log('<b>'+sc.cls+'</b> deployed — 2.2× weapon damage for 14s.');
+  }
+  renderAbilities();
+}
+
+/* ============================ purchase ============================ */
+
+function buyUnit(i){
+  const amt = S.buy==='max' ? maxAffordable(i) : S.buy;
+  if(amt<1) return;
+  const cost=unitCost(i,S.team[i].lvl,amt);
+  if(cost>S.glimmer) {
+    const one=unitCost(i,S.team[i].lvl,1);
+    if(one>S.glimmer) return;
+    return buyExact(i,1,one);
+  }
+  buyExact(i,amt,cost);
+}
+function buyExact(i,amt,cost){
+  S.glimmer-=cost;
+  const was=S.team[i].lvl;
+  S.team[i].lvl+=amt;
+  if(was===0) log('<b>'+GUARDIANS[i].n+'</b> joined the fireteam.');
+  renderFireteam(); renderTop();
+}
+function upgCost(i,tier){ return GUARDIANS[i].cost*Math.pow(14,tier+1)*4; }
+function buyUpgrade(i){
+  const u=S.team[i], tier=u.upg;
+  if(tier>=UPG_TIERS.length) return;
+  if(u.lvl<UPG_TIERS[tier]) return;
+  const c=upgCost(i,tier);
+  if(S.glimmer<c) return;
+  S.glimmer-=c; u.upg++;
+  log(GUARDIANS[i].n+' upgraded — damage doubled.');
+  renderFireteam(); renderTop();
+}
+
+/* ============================ prestige ============================ */
+
+function doReset(){
+  const gain=shardsFor(S.runBest);
+  if(gain<1) return;
+  const stats=S.stats; stats.resets++;
+  S=freshRun(S.perks,S.shards+gain,stats,S.best);
+  S.sub=S.sub;
+  spawn(); renderAll(); save();
+  toast('+'+gain+' Legendary Shards');
+  log('Light reset. <b>'+gain+'</b> shards banked. Fireteam disbanded, gear vaulted.');
+}
+
+/* ============================ loop ============================ */
+
+let lastClickPos=null, acc=0, autoAcc=0, uiAcc=0;
+function tick(dt){
+  const dps=teamDps();
+  if(E && dps>0) damage(dps*dt,null);
+
+  const shots=autoShots();
+  if(shots>0){
+    autoAcc+=dt*shots;
+    while(autoAcc>=1){ autoAcc-=1; if(E) fire(null,null); }
+  }
+
+  for(const k in S.cd) if(S.cd[k]>0) S.cd[k]=Math.max(0,S.cd[k]-dt);
+  if(S.buffs.length){
+    for(const b of S.buffs) b.t-=dt;
+    const before=S.buffs.length;
+    S.buffs=S.buffs.filter(b=>b.t>0);
+    if(S.buffs.length!==before) renderAbilities();
+  }
+  if(E && E.boss){
+    E.timer-=dt;
+    if(E.timer<=0) bossFail();
+  }
+}
+
+let prev=performance.now();
+function frame(now){
+  let dt=(now-prev)/1000; prev=now;
+  if(dt>0.5) dt=0.5;
+  tick(dt);
+  uiAcc+=dt;
+  if(uiAcc>0.1){ uiAcc=0; renderHp(); renderTop(); renderAbilities(); }
+  requestAnimationFrame(frame);
+}
+
+/* ============================ render ============================ */
+
+function renderAll(){ renderTop(); renderZone(); renderEnemy(); renderFireteam(); renderGear(); renderAbilities(); }
+
+function renderTop(){
+  $('#ro-glimmer').textContent=fmt(S.glimmer);
+  $('#ro-dps').textContent=fmt(teamDps());
+  $('#ro-click').textContent=fmt(clickDamage());
+  $('#ro-light').textContent=light();
+  $('#ro-shards').textContent=S.shards;
+  const btn=$('#btn-reset');
+  const gain=shardsFor(S.runBest);
+  btn.disabled=gain<1;
+  btn.textContent = gain>0 ? 'Reset Light +'+gain : 'Reset Light';
+  btn.classList.toggle('hot',gain>0);
+}
+
+function renderZone(){
+  const a=areaFor(S.zone);
+  $('#z-num').textContent=S.zone;
+  $('#z-area').textContent=a.n;
+  $('#z-faction').textContent=a.f+' — '+a.sub;
+  const pips=$('#z-pips');
+  let h='';
+  for(let i=0;i<10;i++) h+='<span class="pip'+(i<S.kills?' done':'')+'"></span>';
+  if(isBossZone(S.zone)) h='<span class="pip boss"></span>';
+  pips.innerHTML=h;
+}
+
+function renderEnemy(){
+  if(!E) return;
+  const a=E.area;
+  document.documentElement.style.setProperty('--faction',a.c);
+  const g=$('#e-glyph');
+  g.style.color=a.c;
+  g.innerHTML=GLYPHS[a.f];
+  $('#e-rank').textContent=E.rank;
+  $('#e-name').textContent=E.name;
+  $('#enemy').classList.toggle('boss',E.boss);
+  $('#hpbar').classList.toggle('boss',E.boss);
+  renderHp(); renderZone();
+}
+
+function renderHp(){
+  if(!E) return;
+  const p=Math.max(0,E.hp)/E.max;
+  $('#hpfill').style.transform='scaleX('+p+')';
+  $('#hp-text').textContent=fmt(Math.max(0,E.hp))+' / '+fmt(E.max);
+  const t=$('#boss-timer');
+  if(E.boss){ t.textContent='⏱ '+E.timer.toFixed(1)+'s'; t.classList.toggle('low',E.timer<8); }
+  else t.textContent='';
+}
+
+let ftBuilt=false;
+function renderFireteam(){
+  const list=$('#ft-list');
+  if(!ftBuilt){
+    let h='';
+    GUARDIANS.forEach((g,i)=>{
+      h+='<button class="unit" data-buy-unit="'+i+'">'
+        +'<span class="sig">'+CLASS_GLYPH[g.g]+'</span>'
+        +'<span><span class="nm">'+g.n+' <em class="lv"></em></span><span class="sub">'+g.r+'</span></span>'
+        +'<span class="cost"></span></button>'
+        +'<div class="upg" data-upg-row="'+i+'"></div>';
+    });
+    list.innerHTML=h; ftBuilt=true;
+  }
+  let owned=0;
+  GUARDIANS.forEach((g,i)=>{
+    const u=S.team[i];
+    const el=list.querySelector('[data-buy-unit="'+i+'"]');
+    const amt = S.buy==='max' ? Math.max(1,maxAffordable(i)) : S.buy;
+    const cost=unitCost(i,u.lvl,amt);
+    if(u.lvl) owned++;
+    el.classList.toggle('locked',u.lvl===0);
+    el.classList.toggle('afford',S.glimmer>=cost);
+    el.querySelector('.lv').textContent = u.lvl ? 'Lv '+u.lvl+(u.upg?' ✦'+u.upg:'') : '';
+    el.querySelector('.sub').textContent = u.lvl
+      ? fmt(GUARDIANS[i].dps*u.lvl*Math.pow(2,u.upg)*(1+gearStat('team')/100)*globalMult())+' dps'
+      : g.r;
+    el.querySelector('.cost').innerHTML=fmt(cost)+'<em>×'+(S.buy==='max'?amt:amt)+'</em>';
+
+    const row=list.querySelector('[data-upg-row="'+i+'"]');
+    const tier=u.upg;
+    if(tier<UPG_TIERS.length && u.lvl>0){
+      const need=UPG_TIERS[tier], c=upgCost(i,tier), ok=u.lvl>=need&&S.glimmer>=c;
+      row.innerHTML='<button data-upg="'+i+'"'+(ok?'':' disabled')+'>'
+        +(u.lvl>=need ? '✦ DOUBLE DPS · '+fmt(c) : 'Unlocks at Lv '+need)+'</button>';
+    } else row.innerHTML='';
+  });
+  $('#ft-count').textContent=owned+' / 12';
+}
+
+function engramSvg(r,size){
+  const c=RARITY[r].hex;
+  return '<svg class="eng" viewBox="0 0 24 24" width="'+size+'" height="'+size+'" style="width:'+size+'px;height:'+size+'px">'
+    +'<path d="M12 2 21 7.5v9L12 22 3 16.5v-9z" fill="'+c+'" opacity=".22"/>'
+    +'<path d="M12 5 18 8.7v6.6L12 19l-6-3.7V8.7z" fill="'+c+'" opacity=".55"/>'
+    +'<path d="M12 8.6l3 1.9v3.3l-3 1.8-3-1.8v-3.3z" fill="'+c+'"/></svg>';
+}
+
+function renderGear(){
+  const sl=$('#slots');
+  let h='', eq=0;
+  for(const s of SLOTS){
+    const it=S.gear[s.k];
+    if(it) eq++;
+    h+='<button class="slot'+(it?'':' empty')+'" data-slot="'+s.k+'" style="border-left-color:'+(it?RARITY[it.r].hex:'transparent')+'">'
+      +'<span class="sl">'+s.n+'</span>'
+      +'<span class="it" style="color:'+(it?RARITY[it.r].hex:'')+'">'+(it?it.name:'Empty')+'</span>'
+      +'<span class="pw">'+(it?it.pow+' · '+it.type:'—')+'</span></button>';
+  }
+  sl.innerHTML=h;
+  $('#gear-tag').textContent=eq+' / 8 equipped';
+  $('#light-big').textContent=light();
+  $('#light-mult').textContent='×'+lightMult().toFixed(2)+' damage';
+
+  const pm=$('#pm-list');
+  if(!S.pm.length){
+    pm.innerHTML='<p class="empty-note">No engrams held.<br>Enemies drop loot · bosses always do.</p>';
+  }else{
+    pm.innerHTML=S.pm.map(it=>{
+      const cur=S.gear[it.slot];
+      const d=cur?it.pow-cur.pow:it.pow;
+      return '<button class="drop" data-drop="'+it.id+'" style="border-left-color:'+RARITY[it.r].hex+'">'
+        +engramSvg(it.r,26)
+        +'<span><span class="dn" style="color:'+RARITY[it.r].hex+'">'+it.name+'</span>'
+        +'<span class="dt">'+it.slotN+' · '+RARITY[it.r].n+'</span></span>'
+        +'<span class="dp">'+it.pow+'<em class="'+(d>0?'up':'down')+'">'+(d>0?'+'+d:d)+'</em></span></button>';
+    }).join('');
+  }
+  $('#pm-ct').textContent=S.pm.length+' held';
+}
+
+function renderAbilities(){
+  const sc=SUBCLASSES[S.sub];
+  const set=(id,key,name,cdMax)=>{
+    const el=$(id);
+    el.querySelector('.lbl').textContent=name;
+    const cd=S.cd[key];
+    const ready=cd<=0;
+    el.classList.toggle('ready',ready);
+    el.querySelector('.cool').style.transform='scaleX('+(ready?0:cd/cdMax)+')';
+    el.querySelector('.cdtext').textContent=ready?'':Math.ceil(cd);
+  };
+  set('#ab-grenade','grenade',sc.gren,18*cdrMult());
+  set('#ab-melee','melee',sc.melee,10*cdrMult());
+  set('#ab-class','cls',sc.cls,32*cdrMult());
+  $('#ab-grenade').querySelector('.abd').textContent=fmt((teamDps()*11+clickDamage()*22)*abilityMult())+' burst';
+  $('#ab-melee').querySelector('.abd').textContent=fmt((teamDps()*4.5+clickDamage()*11)*abilityMult())+' burst';
+  $('#ab-class').querySelector('.abd').textContent='2.2× weapon · 14s';
+  $('#ab-fire').querySelector('.abd').textContent=fmt(clickDamage())+' · '+Math.round(critChance()*100)+'% crit';
+
+  const sup=$('#ab-super');
+  sup.querySelector('.lbl').textContent=sc.sup;
+  sup.style.color='';
+  $('#super-fill').style.transform='scaleX('+(S.superE/100)+')';
+  const charged=S.superE>=100;
+  sup.classList.toggle('charged',charged);
+  $('#super-d').textContent=charged?'READY — unleash':Math.floor(S.superE)+'% charged';
+
+  const buffTxt=S.buffs.map(b=>b.n+' '+b.t.toFixed(0)+'s').join(' · ');
+  const tk=$('#ticker');
+  if(buffTxt && tk.dataset.buff!==buffTxt){ tk.dataset.buff=buffTxt; }
+}
+
+function popDamage(v,kind){
+  const vp=$('#viewport'), r=vp.getBoundingClientRect();
+  const el=document.createElement('span');
+  el.className='dmg '+(kind==='crit'?'crit':kind==='abil'?'abil':'');
+  el.textContent=(kind==='crit'?'':'')+fmt(v);
+  let x,y;
+  if(lastClickPos && lastClickPos[0]!=null){ x=lastClickPos[0]; y=lastClickPos[1]; }
+  else { x=r.width/2+(Math.random()*140-70); y=r.height*0.42+(Math.random()*40-20); }
+  lastClickPos=null;
+  el.style.left=x+'px'; el.style.top=y+'px';
+  vp.appendChild(el);
+  setTimeout(()=>el.remove(),920);
+}
+function hitShake(){
+  const e=$('#enemy');
+  e.classList.add('hit');
+  setTimeout(()=>e.classList.remove('hit'),75);
+}
+function flash(color){
+  const f=$('#flash');
+  f.style.color=color; f.classList.remove('go');
+  void f.offsetWidth;
+  f.classList.add('go');
+}
+function log(msg){
+  const t=$('#ticker');
+  const p=document.createElement('p');
+  p.innerHTML=msg;
+  t.prepend(p);
+  while(t.children.length>14) t.lastChild.remove();
+}
+let toastT;
+function toast(msg){
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const el=document.createElement('div');
+  el.className='toast'; el.textContent=msg;
+  document.body.appendChild(el);
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>el.remove(),2200);
+}
+
+/* ============================ modals ============================ */
+
+function closeSheet(){ $('#scrim').hidden=true; }
+function openSheet(html){ $('#sheet').innerHTML=html; $('#scrim').hidden=false; }
+
+function showItem(item,fromPm){
+  const rar=RARITY[item.r], cur=S.gear[item.slot];
+  let perks=item.perks.map(p=>'<div class="perkrow"><b>'+p.n+'</b><span>'+(p.neg?'−':'+')+p.v+p.suf+' '+p.d+'</span></div>').join('');
+  let cmp='';
+  if(cur && cur.id!==item.id){
+    const d=item.pow-cur.pow;
+    cmp='<p class="cmp">Currently equipped: <span style="color:'+RARITY[cur.r].hex+'">'+cur.name+'</span> · '+cur.pow
+      +' power ('+(d>0?'+'+d:d)+') · '+cur.perks.map(p=>p.n).join(', ')+'</p>';
+  }
+  openSheet(
+    '<div class="sheet-hd"><h2>'+(fromPm?'Engram Decrypted':'Equipped')+'</h2><button class="x" data-close>✕</button></div>'
+    +'<div class="sheet-bd">'
+    +'<div class="itemcard"><span class="big">'+engramSvg(item.r,58)+'</span>'
+    +'<div><h3 style="color:'+rar.hex+'">'+item.name+'</h3><div class="type">'+rar.n+' '+item.type+' · '+item.slotN+'</div></div>'
+    +'<div class="pow">'+item.pow+'<em>Power</em></div></div>'
+    +perks+cmp+'</div>'
+    +(fromPm
+      ? '<div class="sheet-ft"><button class="btn hot" data-equip="'+item.id+'">Equip</button><button class="btn" data-dis="'+item.id+'">Dismantle · +'+fmt(rar.sh*S.zone)+' glimmer</button></div>'
+      : '<div class="sheet-ft"><button class="btn" data-close>Close</button></div>')
+  );
+}
+
+function showSubclass(){
+  let cards='';
+  for(const k in SUBCLASSES){
+    const s=SUBCLASSES[k];
+    cards+='<button class="subcard" data-sub="'+k+'" aria-pressed="'+(S.sub===k)+'" style="color:'+s.c+'">'
+      +s.icon+'<b>'+s.n+'</b><span>'+s.perk+'</span>'
+      +'<span style="color:var(--dim);margin-top:6px">'+s.sup+' · '+s.gren+'</span></button>';
+  }
+  openSheet('<div class="sheet-hd"><h2>Subclass</h2><button class="x" data-close>✕</button></div>'
+    +'<div class="sheet-bd"><p>Reattune your Light. Swapping is free and instant — your abilities and passive change with it.</p>'
+    +'<div class="subgrid">'+cards+'</div></div>');
+}
+
+function showResetSheet(){
+  const gain=shardsFor(S.runBest);
+  let rows=SHARD_PERKS.map(p=>{
+    const r=shardRank(p.id), c=p.cost(r), maxed=r>=p.max;
+    return '<button class="shoprow" data-shard="'+p.id+'"'+(maxed||S.shards<c?' disabled':'')+'>'
+      +'<span><b>'+p.n+'</b><span>'+p.d+'</span></span>'
+      +'<span class="rk">'+r+' / '+p.max+'</span>'
+      +'<span class="pr">'+(maxed?'MAX':c+' ◈')+'</span></button>';
+  }).join('');
+  openSheet('<div class="sheet-hd"><h2>Reset Light</h2><button class="x" data-close>✕</button></div>'
+    +'<div class="sheet-bd"><p>Give your Light back to the Traveler. Fireteam, gear and glimmer are lost; '
+    +'Legendary Shards and everything bought with them are kept forever.</p>'
+    +'<div class="statgrid"><div><span>Deepest sector this run</span><b>'+S.runBest+'</b></div>'
+    +'<div><span>Shards on reset</span><b style="color:var(--r3)">'+gain+'</b></div>'
+    +'<div><span>Shards banked</span><b>'+S.shards+'</b></div>'
+    +'<div><span>Resets</span><b>'+S.stats.resets+'</b></div></div>'
+    +'<p style="margin-top:16px;font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase">Shard Upgrades</p>'
+    +'<div class="shop">'+rows+'</div></div>'
+    +'<div class="sheet-ft">'
+    +(gain>0?'<button class="btn hot" data-doreset>Reset for '+gain+' shards</button>':'<button class="btn" disabled>Reach Sector 100 to reset</button>')
+    +'<button class="btn ghost" data-close>Keep going</button></div>');
+}
+
+function showMenu(){
+  const st=S.stats;
+  openSheet('<div class="sheet-hd"><h2>Vanguard Record</h2><button class="x" data-close>✕</button></div>'
+    +'<div class="sheet-bd">'
+    +'<div class="statgrid">'
+    +'<div><span>Deepest sector</span><b>'+S.best+'</b></div>'
+    +'<div><span>Enemies killed</span><b>'+fmt(st.kills)+'</b></div>'
+    +'<div><span>Bosses down</span><b>'+fmt(st.bosses)+'</b></div>'
+    +'<div><span>Shots fired</span><b>'+fmt(st.clicks)+'</b></div>'
+    +'<div><span>Engrams decrypted</span><b>'+fmt(st.drops)+'</b></div>'
+    +'<div><span>Total damage</span><b>'+fmt(st.dmg)+'</b></div>'
+    +'</div>'
+    +'<p style="margin-top:18px">Progress saves to this browser automatically. Idle damage keeps running while the tab is closed — the Postmaster holds your glimmer for up to 4 hours.</p>'
+    +'<p style="font-family:var(--f-mono);font-size:10.5px;color:var(--dim)">Keys — Space: fire · Q: grenade · E: melee · C: class ability · R: super</p>'
+    +'</div>'
+    +'<div class="sheet-ft"><button class="btn ghost" data-wipe>Delete save</button><button class="btn" data-close>Close</button></div>');
+}
+
+/* ============================ save ============================ */
+
+function save(){
+  try{
+    S.last=Date.now();
+    localStorage.setItem(SAVE_KEY,JSON.stringify(S));
+  }catch(e){}
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    const d=JSON.parse(raw);
+    if(!d || !d.team) return false;
+    S=Object.assign(freshRun(d.perks,d.shards,d.stats,d.best),d);
+    S.buffs=[]; S.cd={grenade:0,melee:0,cls:0};
+    if(!S.runBest) S.runBest=S.zone;
+    return true;
+  }catch(e){ return false; }
+}
+function offline(){
+  if(!S.last) return;
+  const dt=Math.min((Date.now()-S.last)/1000,4*3600);
+  if(dt<60) return;
+  const dps=teamDps();
+  if(dps<=0) return;
+  const per=enemyMaxHp(S.zone,false);
+  const kills=Math.min(dps*dt/per, 1e6);
+  const gain=kills*glimmerFor(S.zone,false);
+  if(gain<1) return;
+  S.glimmer+=gain;
+  log('Postmaster held <b>'+fmt(gain)+' glimmer</b> from '+fmtTime(dt)+' of fireteam ops.');
+  toast('+'+fmt(gain)+' glimmer while away');
+}
+
+/* ============================ wiring ============================ */
+
+$('#viewport').addEventListener('pointerdown',e=>{
+  const r=e.currentTarget.getBoundingClientRect();
+  fire(e.clientX-r.left,e.clientY-r.top);
+});
+$('#ab-fire').addEventListener('click',()=>fire(null,null));
+$('#ab-grenade').addEventListener('click',()=>useAbility('grenade'));
+$('#ab-melee').addEventListener('click',()=>useAbility('melee'));
+$('#ab-class').addEventListener('click',()=>useAbility('cls'));
+$('#ab-super').addEventListener('click',()=>useAbility('super'));
+
+addEventListener('keydown',e=>{
+  if(e.target.closest('input,textarea')) return;
+  const k=e.key.toLowerCase();
+  if(k===' '||e.code==='Space'){
+    if(document.activeElement && document.activeElement.tagName==='BUTTON') return;
+    e.preventDefault(); fire(null,null);
+  }
+  else if(k==='q') useAbility('grenade');
+  else if(k==='e') useAbility('melee');
+  else if(k==='c') useAbility('cls');
+  else if(k==='r') useAbility('super');
+  else if(k==='escape') closeSheet();
+});
+
+$('#ft-list').addEventListener('click',e=>{
+  const b=e.target.closest('[data-buy-unit]');
+  if(b){ buyUnit(+b.dataset.buyUnit); return; }
+  const u=e.target.closest('[data-upg]');
+  if(u) buyUpgrade(+u.dataset.upg);
+});
+
+document.querySelectorAll('.buybar button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.buybar button').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true');
+    S.buy = b.dataset.buy==='max' ? 'max' : +b.dataset.buy;
+    renderFireteam();
+  });
+});
+
+$('#btn-auto').addEventListener('click',e=>{
+  S.auto=!S.auto;
+  e.currentTarget.setAttribute('aria-pressed',S.auto);
+  e.currentTarget.textContent = S.auto?'Auto ▸':'Hold ■';
+});
+
+$('#p-gear').addEventListener('click',e=>{
+  const d=e.target.closest('[data-drop]');
+  if(d){ const it=S.pm.find(x=>x.id===d.dataset.drop); if(it) showItem(it,true); return; }
+  const s=e.target.closest('[data-slot]');
+  if(s){ const it=S.gear[s.dataset.slot]; if(it) showItem(it,false); }
+});
+
+$('#btn-dismantle').addEventListener('click',()=>{
+  let g=0;
+  for(const it of S.pm) g+=RARITY[it.r].sh*S.zone;
+  if(!S.pm.length) return;
+  log('Dismantled '+S.pm.length+' engrams for <b>'+fmt(g)+' glimmer</b>.');
+  S.glimmer+=g; S.pm=[];
+  renderGear(); renderTop();
+});
+
+$('#btn-subclass').addEventListener('click',showSubclass);
+$('#btn-reset').addEventListener('click',showResetSheet);
+$('#btn-menu').addEventListener('click',showMenu);
+
+$('#scrim').addEventListener('click',e=>{
+  if(e.target===$('#scrim')||e.target.closest('[data-close]')) return closeSheet();
+  const eq=e.target.closest('[data-equip]');
+  if(eq){ const it=S.pm.find(x=>x.id===eq.dataset.equip); if(it){ equip(it); toast('Equipped'); } return closeSheet(); }
+  const di=e.target.closest('[data-dis]');
+  if(di){ const it=S.pm.find(x=>x.id===di.dataset.dis); if(it) dismantle(it); return closeSheet(); }
+  const sb=e.target.closest('[data-sub]');
+  if(sb){ S.sub=sb.dataset.sub; renderAbilities(); renderTop(); log('Attuned to <b>'+SUBCLASSES[S.sub].n+'</b> — '+SUBCLASSES[S.sub].perk); return closeSheet(); }
+  const sp=e.target.closest('[data-shard]');
+  if(sp){
+    const p=SHARD_PERKS.find(x=>x.id===sp.dataset.shard), r=shardRank(p.id), c=p.cost(r);
+    if(r<p.max && S.shards>=c){ S.shards-=c; S.perks[p.id]=r+1; renderTop(); renderAbilities(); showResetSheet(); }
+    return;
+  }
+  if(e.target.closest('[data-doreset]')){ closeSheet(); doReset(); return; }
+  if(e.target.closest('[data-wipe]')){
+    try{ localStorage.removeItem(SAVE_KEY); }catch(err){}
+    S=freshRun(); spawn(); renderAll(); closeSheet(); toast('Save deleted');
+  }
+});
+
+document.querySelectorAll('.tabs button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const gear=b.id==='tab-gear';
+    $('#tab-gear').setAttribute('aria-pressed',gear);
+    $('#tab-fireteam').setAttribute('aria-pressed',!gear);
+    $('#p-gear').hidden=!gear;
+    $('#p-fireteam').hidden=gear;
+  });
+});
+
+function syncPanels(){
+  const narrow=matchMedia('(max-width:1180px)').matches;
+  if(narrow){
+    const gear=$('#tab-gear').getAttribute('aria-pressed')==='true';
+    $('#p-gear').hidden=!gear; $('#p-fireteam').hidden=gear;
+  }else{ $('#p-gear').hidden=false; $('#p-fireteam').hidden=false; }
+}
+addEventListener('resize',syncPanels);
+
+/* ============================ boot ============================ */
+
+const returning=load();
+if(!returning) S=freshRun();
+spawn();
+renderAll();
+syncPanels();
+
+if(returning){
+  log('Welcome back, Guardian. Sector <b>'+S.zone+'</b>, '+areaFor(S.zone).n+'.');
+  offline();
+}else{
+  log('Ghost online. Hostiles inbound in the <b>Cosmodrome</b>.');
+  log('Click the target to fire. Buy Guardians to farm while you idle.');
+}
+
+setInterval(save,10000);
+addEventListener('beforeunload',save);
+requestAnimationFrame(frame);
+</script>
