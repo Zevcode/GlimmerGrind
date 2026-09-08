@@ -21,14 +21,12 @@
   --solar:#FF8A3D;
   --solar-deep:#A8380F;
   --gold:#FFC46B;
-  --solar-glow:rgba(255,138,61,.18);
 
   /* currencies read apart from one another */
   --glimmer:#5CD0C4;
 
   /* information colors stay cool against the warm ground */
   --arc:#7FD8FF;
-  --voidlight:#B36BF2;
   --ok:#6FCF8E;
   --warn:#EFD84E;
   --bad:#E0574F;
@@ -47,7 +45,6 @@
   --f-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
 
   --chamfer:polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
-  --s1:4px; --s2:8px; --s3:12px; --s4:18px; --s5:28px;
 }
 
 *{box-sizing:border-box}
@@ -170,7 +167,7 @@ button:disabled{cursor:not-allowed}
 .pips{display:flex;gap:3px}
 .pip{width:11px;height:5px;background:var(--rail);transform:skewX(-20deg)}
 .pip.done{background:var(--solar)}
-.pip.boss{background:var(--bad);width:16px}
+.bosstag{font-family:var(--f-mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--bad);padding:3px 7px;box-shadow:inset 0 0 0 1px rgba(224,87,79,.55);white-space:nowrap}
 
 .viewport{
   position:relative;flex:1;min-height:230px;display:flex;flex-direction:column;
@@ -204,11 +201,16 @@ button:disabled{cursor:not-allowed}
 .hpwrap{width:min(560px,94%);pointer-events:none}
 .hpbar{height:13px;background:var(--plate);position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px var(--rail)}
 .hpfill{position:absolute;inset:0;transform-origin:left;background:linear-gradient(90deg,color-mix(in srgb,var(--faction) 42%,#141012),var(--faction));transition:transform .08s linear}
-.enemy-boss .hpfill,.hpbar.boss .hpfill{background:linear-gradient(90deg,#6E1B18,var(--bad))}
+.hpbar.boss .hpfill{background:linear-gradient(90deg,#6E1B18,var(--bad))}
 .hpmeta{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:10.5px;color:var(--ash);margin-top:4px;font-variant-numeric:tabular-nums}
 .hpmeta .timer{color:var(--warn)}
 .hpmeta .timer.low{color:var(--bad)}
 
+.bufflayer{position:absolute;top:42px;left:0;right:0;display:flex;justify-content:center;gap:6px;pointer-events:none;flex-wrap:wrap;padding:0 12px}
+.buff{display:flex;align-items:center;gap:6px;padding:4px 9px;background:rgba(12,11,12,.72);box-shadow:inset 0 0 0 1px rgba(255,138,61,.5)}
+.buff b{font-family:var(--f-disp);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.buff em{font-family:var(--f-mono);font-style:normal;font-size:9.5px;color:var(--gold)}
+.buff i{font-family:var(--f-mono);font-style:normal;font-size:9.5px;color:var(--ash);font-variant-numeric:tabular-nums}
 .dmg{position:absolute;font-family:var(--f-disp);font-weight:700;font-size:16px;pointer-events:none;transform:translate(-50%,0);animation:float 900ms ease-out forwards;text-shadow:0 2px 8px rgba(0,0,0,.7);font-variant-numeric:tabular-nums}
 .dmg.crit{font-size:23px;color:var(--gold)}
 .dmg.abil{color:var(--arc);font-size:19px}
@@ -241,6 +243,7 @@ button:disabled{cursor:not-allowed}
 .ticker p{margin:0;font-family:var(--f-mono);font-size:10.5px;color:var(--ash);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.55}
 .ticker p:first-child{color:var(--bone)}
 .ticker b{font-weight:400;color:var(--solar)}
+.ticker i{font-style:normal;color:var(--solar)}
 
 /* ---------- gear ---------- */
 .lightplate{padding:12px;border-bottom:1px solid var(--rail);display:flex;align-items:center;gap:12px;flex:none}
@@ -399,12 +402,12 @@ button:disabled{cursor:not-allowed}
         <div class="loc"><b id="z-area">Cosmodrome</b><span id="z-faction">Fallen — House of Dusk</span></div>
         <span class="chip" id="credit-chip">Idle</span>
         <div class="pips" id="z-pips"></div>
-        <button class="btn ghost" id="btn-auto" aria-pressed="true">Auto ▸</button>
       </div>
 
       <div class="viewport" id="viewport">
         <span class="vp-corner tr"></span><span class="vp-corner bl"></span>
         <div class="flash" id="flash"></div>
+        <div class="bufflayer" id="bufflayer"></div>
         <div class="enemy" id="enemy">
           <div class="glyph" id="e-glyph"></div>
           <div class="rank" id="e-rank">Dreg</div>
@@ -611,7 +614,7 @@ function freshRun(shardPerks, shards, stats, best){
     gear:{}, pm:[],
     sub:(S&&S.sub)||'solar',
     superE:0, cd:{grenade:0,melee:0,cls:0}, buffs:[],
-    auto:true, buy:1, seen:0, last:Date.now()
+    buy:1, seen:0, last:Date.now()
   };
 }
 
@@ -766,7 +769,6 @@ function killEnemy(){
 }
 
 function advance(){
-  if(!S.auto && isBossZone(S.zone)){ /* still advance after boss */ }
   S.zone++; S.kills=0;
   if(S.zone>S.best) S.best=S.zone;
   if(S.zone>S.runBest) S.runBest=S.zone;
@@ -987,7 +989,7 @@ function renderZone(){
   const pips=$('#z-pips');
   let h='';
   for(let i=0;i<10;i++) h+='<span class="pip'+(i<S.kills?' done':'')+'"></span>';
-  if(isBossZone(S.zone)) h='<span class="pip boss"></span>';
+  if(isBossZone(S.zone)) h='<span class="bosstag">Boss</span>';
   pips.innerHTML=h;
 }
 
@@ -1129,9 +1131,12 @@ function renderAbilities(){
   sup.classList.toggle('charged',charged);
   $('#super-d').textContent=charged?'READY — unleash':Math.floor(S.superE)+'% charged';
 
-  const buffTxt=S.buffs.map(b=>b.n+' '+b.t.toFixed(0)+'s').join(' · ');
-  const tk=$('#ticker');
-  if(buffTxt && tk.dataset.buff!==buffTxt){ tk.dataset.buff=buffTxt; }
+  const bl=$('#bufflayer');
+  if(bl){
+    bl.innerHTML=S.buffs.map(b=>
+      '<span class="buff"><b>'+b.n+'</b><em>×'+b.v.toFixed(1)+'</em><i>'+Math.ceil(b.t)+'s</i></span>'
+    ).join('');
+  }
 }
 
 function popDamage(v,kind){
@@ -1158,9 +1163,19 @@ function flash(color){
   void f.offsetWidth;
   f.classList.add('go');
 }
+// Repeats collapse into a count rather than stacking — a boss timer expiring
+// on a loop should read as "×3", not fill the log.
 function log(msg){
   const t=$('#ticker');
+  const first=t.firstChild;
+  if(first && first.dataset.raw===msg){
+    const n=(parseInt(first.dataset.n||'1',10))+1;
+    first.dataset.n=n;
+    first.innerHTML=msg+' <i>×'+n+'</i>';
+    return;
+  }
   const p=document.createElement('p');
+  p.dataset.raw=msg;
   p.innerHTML=msg;
   t.prepend(p);
   while(t.children.length>14) t.lastChild.remove();
@@ -1331,12 +1346,6 @@ document.querySelectorAll('.buybar button').forEach(b=>{
     S.buy = b.dataset.buy==='max' ? 'max' : +b.dataset.buy;
     renderFireteam();
   });
-});
-
-$('#btn-auto').addEventListener('click',e=>{
-  S.auto=!S.auto;
-  e.currentTarget.setAttribute('aria-pressed',S.auto);
-  e.currentTarget.textContent = S.auto?'Auto ▸':'Hold ■';
 });
 
 $('#p-gear').addEventListener('click',e=>{

@@ -89,7 +89,9 @@ struct GuardianRow: View {
                             .font(.display(11.5, .semibold))
                             .foregroundStyle(affordable ? Pal.ok : Pal.glimmer)
                             .monospacedDigit()
-                        Text("×\(count)").hudLabel()
+                        if game.buyAmount == .max {
+                            Text("×\(count)").hudLabel()
+                        }
                     }
                 }
                 .padding(.horizontal, 10)
@@ -103,20 +105,25 @@ struct GuardianRow: View {
                 let reached = unit.level >= threshold
                 let enabled = game.canUpgrade(index)
                 HStack {
-                    Button { game.upgrade(index) } label: {
-                        Text(reached
-                             ? "✦ DOUBLE DPS · \(Fmt.n(game.upgradeCost(index)))"
-                             : "Unlocks at Lv \(threshold)")
-                            .font(.data(9.5))
+                    if reached {
+                        Button { game.upgrade(index) } label: {
+                            Text("✦ DOUBLE DPS · \(Fmt.n(game.upgradeCost(index)))")
+                                .font(.data(9.5))
+                                .tracking(0.6)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(enabled ? Pal.solar.opacity(0.13) : Pal.dim.opacity(0.10))
+                                .foregroundStyle(enabled ? Pal.solar : Pal.dim)
+                                .overlay(Rectangle().stroke(
+                                    enabled ? Pal.solar.opacity(0.3) : Pal.dim.opacity(0.2), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!enabled)
+                    } else {
+                        Text("✦ at Lv \(threshold)")
+                            .font(.data(9))
                             .tracking(0.6)
-                            .padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(enabled ? Pal.solar.opacity(0.13) : Pal.dim.opacity(0.12))
-                            .foregroundStyle(enabled ? Pal.solar : Pal.dim)
-                            .overlay(Rectangle().stroke(
-                                enabled ? Pal.solar.opacity(0.3) : Pal.dim.opacity(0.25), lineWidth: 1))
+                            .foregroundStyle(Pal.dim)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!enabled)
                     Spacer()
                 }
                 .padding(.leading, 53)

@@ -37,6 +37,14 @@ struct Stats: Codable {
     var damage: Double = 0
 }
 
+/// A ticker line. Repeats collapse into a count rather than stacking — a
+/// boss timer expiring on a loop should read as "×3", not fill the log.
+struct LogEntry: Identifiable {
+    let id = UUID()
+    var text: String
+    var count: Int = 1
+}
+
 struct Buff: Identifiable {
     enum Kind { case all, click }
     let id = UUID()
@@ -120,7 +128,7 @@ final class Game {
     var cooldowns: [String: Double] = ["grenade": 0, "melee": 0, "class": 0]
     var buffs: [Buff] = []
     var buyAmount: BuyAmount = .one
-    var log: [String] = []
+    var log: [LogEntry] = []
     var popups: [Popup] = []
     var toast: String?
     var hitPulse: Double = 0
@@ -613,7 +621,11 @@ final class Game {
     // MARK: - Log & toast
 
     func addLog(_ message: String) {
-        log.insert(message, at: 0)
+        if let first = log.first, first.text == message {
+            log[0].count += 1
+            return
+        }
+        log.insert(LogEntry(text: message), at: 0)
         if log.count > 14 { log.removeLast() }
     }
 

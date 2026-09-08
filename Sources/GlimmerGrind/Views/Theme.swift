@@ -107,6 +107,8 @@ struct HudButtonStyle: ButtonStyle {
             .tracking(1.3)
             .textCase(.uppercase)
             .foregroundStyle(hot ? Color(hex: 0x12060A) : Pal.bone)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
             .background {

@@ -136,20 +136,19 @@ struct TopBar: View {
     var compact: Bool
 
     var body: some View {
-        HStack(spacing: 0) {
-            crest
-            readouts
-            if !compact { Spacer(minLength: 8); actions }
-        }
-        .panel()
-        .overlay(alignment: .bottom) {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                crest
+                readouts
+                if !compact { Spacer(minLength: 8); actions }
+            }
             if compact {
                 HStack { Spacer(); actions }
-                    .padding(.trailing, 8)
-                    .offset(y: 44)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
             }
         }
-        .padding(.bottom, compact ? 44 : 0)
+        .panel()
     }
 
     private var crest: some View {

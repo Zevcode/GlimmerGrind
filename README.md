@@ -4,8 +4,10 @@ An idle looter-shooter for macOS — Clicker Heroes progression wearing a
 Destiny-flavoured HUD. Farm sectors, build a fireteam, chase engrams, reset your
 Light for shards, repeat.
 
-Written in SwiftUI. No dependencies, no binary assets — every sigil, class mark,
-engram and app icon is drawn from vector paths in code.
+Written in SwiftUI. No dependencies — every sigil, class mark, engram and the
+app icon are drawn from vector paths in code.
+
+![Glimmer Grind running on macOS](docs/screenshot.png)
 
 ---
 
@@ -59,6 +61,18 @@ spend them across seven permanent upgrade tracks.
 
 Keys — `Space` fire · `Q` grenade · `E` melee · `C` class ability · `R` super.
 
+## Tests
+
+```bash
+./run-tests.sh
+```
+
+39 checks covering the progression curve, the participation rule, hiring,
+loot rolls, abilities, prestige and save round-tripping. `Model/` has no SwiftUI
+dependency, so the whole simulation runs headlessly in a CLI — no Xcode, no test
+framework. The suite uses an explicit `check` rather than `assert`, because
+`assert` is compiled out under `-O` and would silently pass everything.
+
 ## Layout
 
 ```
@@ -74,6 +88,7 @@ Sources/GlimmerGrind/
     CombatView.swift      viewport, ability bar, damage numbers, ticker
     Panels.swift          fireteam roster, loadout, postmaster
     Sheets.swift          item inspect, subclass, reset, record
+Tests/EngineTests.swift   headless engine tests
 Tools/make-icon.swift     renders AppIcon.icns with CoreGraphics
 web/glimmer-grind.html    a standalone browser build of the same game
 ```

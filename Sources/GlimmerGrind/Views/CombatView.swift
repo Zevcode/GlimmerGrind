@@ -85,8 +85,13 @@ struct CombatView: View {
     private var pips: some View {
         HStack(spacing: 3) {
             if game.isBossZone {
-                Rectangle().fill(Pal.bad).frame(width: 16, height: 5)
-                    .rotationEffect(.degrees(0))
+                Text("BOSS")
+                    .font(.data(9))
+                    .tracking(1.6)
+                    .foregroundStyle(Pal.bad)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .overlay(Rectangle().stroke(Pal.bad.opacity(0.55), lineWidth: 1))
             } else {
                 ForEach(0..<10, id: \.self) { i in
                     Rectangle()
@@ -95,7 +100,6 @@ struct CombatView: View {
                 }
             }
         }
-        .rotation3DEffect(.degrees(0), axis: (0, 0, 1))
     }
 
     // MARK: - Viewport
@@ -129,8 +133,8 @@ struct CombatView: View {
                         VStack(spacing: 9) {
                             FactionGlyph(faction: enemy.area.faction)
                                 .foregroundStyle(faction)
-                                .frame(width: compact ? 104 : 132, height: compact ? 104 : 132)
-                                .shadow(color: faction.opacity(0.55), radius: 22)
+                                .frame(width: compact ? 120 : 176, height: compact ? 120 : 176)
+                                .shadow(color: faction.opacity(0.55), radius: 28)
 
                             Text(enemy.rank)
                                 .font(.data(9.5))
@@ -176,12 +180,40 @@ struct CombatView: View {
         .frame(minHeight: compact ? 260 : 230)
         .frame(maxHeight: .infinity)
         .panel()
-        .shadow(color: .black.opacity(0.5), radius: 0)
+        .overlay(alignment: .top) { buffStrip }
         #if os(macOS)
         .onHover { inside in
             if inside { NSCursor.crosshair.push() } else { NSCursor.pop() }
         }
         #endif
+    }
+
+    /// Super and class-ability multipliers run on a timer you otherwise
+    /// could not see. Floated over the scene so it costs no layout height.
+    private var buffStrip: some View {
+        HStack(spacing: 6) {
+            ForEach(game.buffs) { buff in
+                HStack(spacing: 6) {
+                    Text(buff.name)
+                        .font(.display(10, .semibold))
+                        .tracking(1.2)
+                        .textCase(.uppercase)
+                    Text("×\(String(format: "%.1f", buff.value))")
+                        .font(.data(9.5))
+                        .foregroundStyle(Pal.gold)
+                    Text("\(Int(ceil(buff.remaining)))s")
+                        .font(.data(9.5))
+                        .foregroundStyle(Pal.ash)
+                        .monospacedDigit()
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Pal.void.opacity(0.72))
+                .overlay(Rectangle().stroke(Pal.solar.opacity(0.5), lineWidth: 1))
+            }
+        }
+        .padding(.top, 42)
+        .allowsHitTesting(false)
     }
 
     private func bracket(_ corner: Alignment) -> some View {
@@ -285,8 +317,8 @@ struct CombatView: View {
 
     private var ticker: some View {
         VStack(alignment: .leading, spacing: 1) {
-            ForEach(Array(game.log.prefix(3).enumerated()), id: \.offset) { index, line in
-                LogLine(text: line, primary: index == 0)
+            ForEach(Array(game.log.prefix(3).enumerated()), id: \.element.id) { index, entry in
+                LogLine(entry: entry, primary: index == 0)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
@@ -381,16 +413,17 @@ struct AbilityButton: View {
                         .foregroundStyle(Pal.ash)
                     Text(title)
                         .font(.display(11.5, .semibold))
-                        .tracking(1)
+                        .tracking(0.8)
                         .textCase(.uppercase)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.5)
                 }
                 Text(detail)
                     .font(.data(9.5))
                     .foregroundStyle(Pal.dim)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                    .padding(.trailing, remaining > 0 ? 26 : 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 11).padding(.vertical, 9)
@@ -476,11 +509,11 @@ struct SuperButton: View {
 
 /// Log lines mark emphasis with <angle brackets> so the model stays free of view code.
 struct LogLine: View {
-    let text: String
+    let entry: LogEntry
     let primary: Bool
 
     var body: some View {
-        let parts = text.split(separator: "<", omittingEmptySubsequences: false)
+        let parts = entry.text.split(separator: "<", omittingEmptySubsequences: false)
         return HStack(spacing: 0) {
             ForEach(Array(parts.enumerated()), id: \.offset) { index, chunk in
                 if index == 0 {
@@ -492,6 +525,10 @@ struct LogLine: View {
                 } else {
                     Text(String(chunk))
                 }
+            }
+            if entry.count > 1 {
+                Text(" ×\(entry.count)")
+                    .foregroundStyle(Pal.solar)
             }
         }
         .font(.data(10.5))

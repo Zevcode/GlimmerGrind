@@ -13,6 +13,7 @@ struct GlimmerGrindApp: App {
         #if os(macOS)
         .defaultSize(width: 1320, height: 840)
         .windowResizability(.contentMinSize)
+        .windowStyle(.hiddenTitleBar)
         #endif
     }
 }
