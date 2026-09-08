@@ -20,9 +20,7 @@ struct SheetHost: View {
                 BountiesSheet(game: game, sheet: $sheet)
             }
         }
-        #if os(macOS)
         .frame(minWidth: 420, idealWidth: 560, minHeight: 320)
-        #endif
         .background(Pal.hull)
         .foregroundStyle(Pal.bone)
     }

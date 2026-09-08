@@ -118,7 +118,7 @@ framework. The suite uses an explicit `check` rather than `assert`, because
 
 ```
 Sources/GlimmerGrind/
-  GlimmerGrindApp.swift   @main — window scene and sizing
+  GlimmerGrindApp.swift   @main — window scene and sizing (AppKit, macOS only)
   Model/
     GameData.swift        all static content: destinations, guardians, loot tables
     Game.swift            @Observable engine: combat, loot, prestige, save/load
@@ -138,6 +138,10 @@ web/glimmer-grind.html    the original browser prototype (frozen)
 `web/glimmer-grind.html` is the browser prototype this started as. It is still
 playable and self-contained, but the macOS app is the current build and the two
 no longer track each other.
+
+This is a macOS application, not a cross-platform one. There are no platform
+conditionals in the source — the window, the cursor and the scene configuration
+all assume AppKit.
 
 Nothing under `Model/` imports SwiftUI, so the engine runs and tests headlessly.
 Every proper noun in the game lives in `GameData.swift` — renaming the whole

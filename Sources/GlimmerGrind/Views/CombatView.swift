@@ -1,24 +1,5 @@
 import SwiftUI
-#if os(macOS)
 import AppKit
-#endif
-#if os(iOS)
-import UIKit
-#endif
-
-/// Crits get a nudge in the hand on iPhone; silent everywhere else.
-enum Haptics {
-    static func crit() {
-        #if os(iOS)
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-        #endif
-    }
-    static func tap() {
-        #if os(iOS)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
-        #endif
-    }
-}
 
 struct CombatView: View {
     let game: Game
@@ -220,9 +201,8 @@ struct CombatView: View {
                     y: reduceMotion ? 0 : game.shakeOffset.y)
             .contentShape(Rectangle())
             .onTapGesture(coordinateSpace: .local) { location in
-                let before = game.stats.kills
-                game.fire(at: (location.x - geo.size.width / 2, location.y - geo.size.height * 0.42))
-                if game.stats.kills > before { Haptics.crit() } else { Haptics.tap() }
+                game.fire(at: (location.x - geo.size.width / 2,
+                               location.y - geo.size.height * 0.42))
             }
         }
         .frame(minHeight: compact ? 260 : 230)
@@ -230,11 +210,9 @@ struct CombatView: View {
         .panel(elevated: true)
         .onAppear { breathing = true }
         .overlay(alignment: .top) { buffStrip }
-        #if os(macOS)
         .onHover { inside in
             if inside { NSCursor.crosshair.push() } else { NSCursor.pop() }
         }
-        #endif
     }
 
     /// Super and class-ability multipliers run on a timer you otherwise
@@ -272,7 +250,6 @@ struct CombatView: View {
         let dy = game.weakPoint.y * radius
         return Button {
             game.fire(at: (Double(dx), Double(dy)), precision: true)
-            Haptics.crit()
         } label: {
             ZStack {
                 Circle().fill(Pal.gold.opacity(0.16))
