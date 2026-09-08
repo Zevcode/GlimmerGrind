@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Observation
 
 // MARK: - Persisted value types
@@ -87,12 +88,21 @@ struct Enemy {
     /// Sectors only advance on kills you took part in — the fireteam farms,
     /// but it does not push the front line on its own.
     var playerHit: Bool = false
+
+    /// Champions hold a shield that only the matching ability (or a Super)
+    /// will break. nil for ordinary contacts.
+    var champion: GameData.ChampionKind?
+    var shielded: Bool = false
+    /// Seconds left in the break window; the shield re-forms at zero.
+    var shieldTimer: Double = 0
+    /// Seconds left of Weakened, applied by grenades.
+    var weakened: Double = 0
 }
 
 // MARK: - Damage popups
 
 struct Popup: Identifiable {
-    enum Kind { case hit, crit, ability }
+    enum Kind { case hit, crit, ability, precision }
     let id = UUID()
     var text: String
     var kind: Kind
@@ -133,6 +143,14 @@ final class Game {
     var toast: String?
     var hitPulse: Double = 0
     var flashColor: UInt32?
+
+    /// Weak point drifting across the sigil, in normalised [-1, 1] sigil space.
+    var weakPoint: CGPoint = .zero
+    private var weakVelocity: CGPoint = .zero
+
+    /// Stacks of sustained fire. Builds on every player hit, decays when you stop.
+    var momentum: Int = 0
+    private var momentumDecay: Double = 0
 
     private var autoAccumulator: Double = 0
     private var toastExpiry: Date = .distantPast
@@ -206,6 +224,7 @@ final class Game {
     var clickDamage: Double {
         let base = 2 + fireteamDPS * (0.055 + 0.01 * Double(shardRank("auto")))
         var m = (1 + gearStat(.click) / 100) * (1 + 0.30 * Double(shardRank("marksman")))
+        m *= 1 + GameData.momentumPerStack * Double(momentum)
         if subclass == .solar { m *= 1.3 }
         for buff in buffs where buff.kind == .click { m *= buff.value }
         return base * m * globalMult
@@ -260,8 +279,39 @@ final class Game {
             name = "\(GameData.enemyPrefixes.randomElement(using: &rng)!) \(base)"
         }
 
-        let hp = enemyMaxHP(zone, boss: boss)
-        enemy = Enemy(hp: hp, maxHP: hp, isBoss: boss, name: name, rank: rank, area: a, timer: boss ? 30 : 0)
+        // Champions: bosses from sector 25 (stable per sector via the seeded
+        // generator), ordinary contacts from sector 8 at 12%.
+        var champion: GameData.ChampionKind?
+        if boss {
+            if zone >= 25 { champion = GameData.ChampionKind.allCases.randomElement(using: &rng) }
+        } else if zone >= 8, Double.random(in: 0...1) < 0.12 {
+            champion = GameData.ChampionKind.allCases.randomElement()
+        }
+
+        var hp = enemyMaxHP(zone, boss: boss)
+        var finalRank = rank
+        if let champion {
+            // Bosses already carry a 9x multiplier; stacking champion HP on top
+            // of that made them unkillable inside the 30s timer. The shield is
+            // the difficulty for a boss champion, not extra health.
+            if !boss { hp *= GameData.championHPMultiplier }
+            finalRank = "\(champion.label) Champion"
+        }
+
+        // The name is the character — "Kelgorath, the Cursed" survives being a
+        // champion. The badge and rank carry the champion identity instead.
+        enemy = Enemy(hp: hp, maxHP: hp, isBoss: boss, name: name, rank: finalRank,
+                      area: a, timer: boss ? 30 : 0,
+                      champion: champion, shielded: champion != nil)
+        seedWeakPoint()
+    }
+
+    /// Re-seeds the drifting weak point for a fresh target.
+    private func seedWeakPoint() {
+        let angle = Double.random(in: 0..<(2 * .pi))
+        let speed = Double.random(in: 0.25...0.45)
+        weakPoint = CGPoint(x: Double.random(in: -0.4...0.4), y: Double.random(in: -0.4...0.4))
+        weakVelocity = CGPoint(x: cos(angle) * speed, y: sin(angle) * speed)
     }
 
     // MARK: - Combat
@@ -271,6 +321,13 @@ final class Game {
         guard var e = enemy else { return }
         var dealt = amount
         if e.isBoss { dealt *= bossMult }
+        if e.champion != nil {
+            // A held shield blunts everything, including the fireteam — which is
+            // exactly the pressure: a Champion left to idle DPS stalls.
+            dealt *= e.shielded ? GameData.shieldedDamageMultiplier
+                                : GameData.brokenDamageMultiplier
+        }
+        if e.weakened > 0 { dealt *= GameData.weakenedMultiplier }
         e.hp -= dealt
         if fromPlayer { e.playerHit = true }
         stats.damage += dealt
@@ -341,15 +398,42 @@ final class Game {
     /// `manual` is you pulling the trigger. Auto-shots from Arc or Auto-Loader
     /// deal damage and earn glimmer, but they do not count as participation —
     /// advancing a sector is something you do, not something you buy.
-    func fire(at point: (Double, Double)? = nil, manual: Bool = true) {
+    func fire(at point: (Double, Double)? = nil, manual: Bool = true, precision: Bool = false) {
         guard enemy != nil else { return }
         var dmg = clickDamage
+        if precision { dmg *= GameData.precisionMultiplier }
         let crit = Double.random(in: 0...1) < critChance
         if crit { dmg *= critMult }
         stats.clicks += 1
-        superEnergy = min(100, superEnergy + 0.25 * (1 + gearStat(.superEnergy) / 100))
+        superEnergy = min(100, superEnergy
+                          + (precision ? 0.75 : 0.25) * (1 + gearStat(.superEnergy) / 100))
+
+        // Momentum rewards sustained fire, which is what the participation rule
+        // now asks for. Auto-shots deal damage but never build it.
+        if manual {
+            momentum = Swift.min(GameData.momentumCap, momentum + (precision ? 2 : 1))
+            momentumDecay = 0
+        }
+
         hitPulse = 1
-        damage(dmg, popup: crit ? .crit : .hit, at: point, fromPlayer: manual)
+        let kind: Popup.Kind = precision ? .precision : (crit ? .crit : .hit)
+        damage(dmg, popup: kind, at: point, fromPlayer: manual)
+    }
+
+    /// Does this ability bring down the current Champion's shield?
+    func breaksShield(_ ability: Ability) -> Bool {
+        guard let e = enemy, let kind = e.champion, e.shielded else { return false }
+        return ability == .superAbility || ability.rawValue == kind.breakerRaw
+    }
+
+    private func applyShieldBreak(_ ability: Ability) {
+        guard var e = enemy, let kind = e.champion, e.shielded else { return }
+        guard ability == .superAbility || ability.rawValue == kind.breakerRaw else { return }
+        e.shielded = false
+        e.shieldTimer = GameData.shieldBreakWindow
+        enemy = e
+        addLog("<\(kind.label)> shield broken — \(Int(GameData.shieldBreakWindow))s window.")
+        showToast("\(kind.label) broken")
     }
 
     // MARK: - Abilities
@@ -378,18 +462,23 @@ final class Game {
         switch ability {
         case .grenade:
             cooldowns["grenade"] = cooldownLength(.grenade)
+            applyShieldBreak(.grenade)
             damage(grenadeDamage, popup: .ability, fromPlayer: true)
+            if var e = enemy { e.weakened = GameData.weakenedDuration; enemy = e }
             flash(sub.hex)
         case .melee:
             cooldowns["melee"] = cooldownLength(.melee)
+            applyShieldBreak(.melee)
             damage(meleeDamage, popup: .ability, fromPlayer: true)
         case .classAbility:
             cooldowns["class"] = cooldownLength(.classAbility)
+            applyShieldBreak(.classAbility)
             buffs.append(Buff(kind: .click, value: 2.2, remaining: 14, name: sub.classAbility))
             flash(sub.hex)
             addLog("<\(sub.classAbility)> deployed — 2.2× weapon damage for 14s.")
         case .superAbility:
             superEnergy = 0
+            applyShieldBreak(.superAbility)
             let dmg = (fireteamDPS * 45 + clickDamage * 60) * abilityMult
             damage(dmg, popup: .ability, fromPlayer: true)
             buffs.append(Buff(kind: .all, value: 2.5, remaining: 9, name: sub.superName))
@@ -572,6 +661,7 @@ final class Game {
         postmaster = []
         subclass = keptSub
         superEnergy = 0
+        momentum = 0
         buffs = []
         cooldowns = ["grenade": 0, "melee": 0, "class": 0]
 
@@ -613,9 +703,43 @@ final class Game {
 
         if hitPulse > 0 { hitPulse = Swift.max(0, hitPulse - dt * 12) }
 
+        driftWeakPoint(dt)
+
+        if momentum > 0 {
+            momentumDecay += dt
+            if momentumDecay >= GameData.momentumDecayInterval {
+                momentumDecay = 0
+                momentum -= 1
+            }
+        }
+
+        if var e = enemy {
+            if e.champion != nil, !e.shielded {
+                e.shieldTimer -= dt
+                if e.shieldTimer <= 0 { e.shielded = true; e.shieldTimer = 0 }
+            }
+            if e.weakened > 0 { e.weakened = Swift.max(0, e.weakened - dt) }
+            enemy = e
+        }
+
         let now = Date()
         popups.removeAll { now.timeIntervalSince($0.born) > 0.95 }
         if toast != nil && now > toastExpiry { toast = nil }
+    }
+
+    /// Drifts the weak point and reflects it off a radius-0.8 circle so it
+    /// always stays on the sigil.
+    private func driftWeakPoint(_ dt: Double) {
+        weakPoint.x += weakVelocity.x * dt
+        weakPoint.y += weakVelocity.y * dt
+        let r = (weakPoint.x * weakPoint.x + weakPoint.y * weakPoint.y).squareRoot()
+        guard r > 0.8, r > 0 else { return }
+        let nx = weakPoint.x / r, ny = weakPoint.y / r
+        let dot = weakVelocity.x * nx + weakVelocity.y * ny
+        weakVelocity.x -= 2 * dot * nx
+        weakVelocity.y -= 2 * dot * ny
+        weakPoint.x = nx * 0.8
+        weakPoint.y = ny * 0.8
     }
 
     // MARK: - Log & toast
@@ -701,6 +825,7 @@ final class Game {
         stats = Stats(); best = 1; runBest = 1
         team = GameData.guardians.map { _ in UnitState() }
         gear = [:]; postmaster = []; subclass = .solar; superEnergy = 0
+        momentum = 0
         buffs = []; cooldowns = ["grenade": 0, "melee": 0, "class": 0]
         log = []
         spawn()

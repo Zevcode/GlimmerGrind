@@ -131,10 +131,14 @@ struct CombatView: View {
                         Spacer(minLength: 0)
 
                         VStack(spacing: 9) {
-                            FactionGlyph(faction: enemy.area.faction)
-                                .foregroundStyle(faction)
-                                .frame(width: compact ? 120 : 176, height: compact ? 120 : 176)
-                                .shadow(color: faction.opacity(0.55), radius: 28)
+                            ZStack {
+                                FactionGlyph(faction: enemy.area.faction)
+                                    .foregroundStyle(faction)
+                                    .shadow(color: faction.opacity(0.55), radius: 28)
+                                    .allowsHitTesting(false)
+                                reticle(sigil: compact ? 120 : 176)
+                            }
+                            .frame(width: compact ? 120 : 176, height: compact ? 120 : 176)
 
                             Text(enemy.rank)
                                 .font(.data(9.5))
@@ -148,6 +152,7 @@ struct CombatView: View {
                                 .foregroundStyle(enemy.isBoss ? Pal.bad : Pal.bone)
                                 .multilineTextAlignment(.center)
                         }
+                        .allowsHitTesting(false)
                         .scaleEffect(1 - game.hitPulse * 0.025)
                         .offset(y: game.hitPulse * 2)
 
@@ -155,9 +160,9 @@ struct CombatView: View {
 
                         healthBar(enemy)
                             .frame(maxWidth: 560)
+                            .allowsHitTesting(false)
                     }
                     .padding(18)
-                    .allowsHitTesting(false)
                 }
 
                 // damage numbers
@@ -216,6 +221,55 @@ struct CombatView: View {
         .allowsHitTesting(false)
     }
 
+    /// The weak point. Drifts model-side; this only draws and taps it.
+    private func reticle(sigil size: CGFloat) -> some View {
+        let radius = size / 2
+        let dx = game.weakPoint.x * radius
+        let dy = game.weakPoint.y * radius
+        return Button {
+            game.fire(at: (Double(dx), Double(dy)), precision: true)
+            Haptics.crit()
+        } label: {
+            ZStack {
+                Circle().fill(Pal.gold.opacity(0.16))
+                Circle().stroke(Pal.gold, lineWidth: 1.5)
+                Circle().fill(Pal.gold).frame(width: 4, height: 4)
+                ForEach(0..<4, id: \.self) { i in
+                    Rectangle()
+                        .fill(Pal.gold)
+                        .frame(width: 1, height: 5)
+                        .offset(y: -17)
+                        .rotationEffect(.degrees(Double(i) * 90))
+                }
+            }
+            .frame(width: 30, height: 30)
+            .frame(width: 46, height: 46)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .offset(x: dx, y: dy)
+        .animation(.linear(duration: 0.05), value: game.weakPoint)
+    }
+
+    /// Sustained fire, and how fast it is bleeding away.
+    private var momentumMeter: some View {
+        HStack(spacing: 8) {
+            Text("Momentum").hudLabel()
+            HStack(spacing: 2) {
+                ForEach(0..<GameData.momentumCap, id: \.self) { i in
+                    Rectangle()
+                        .fill(i < game.momentum ? Pal.solar : Pal.rail)
+                        .frame(height: 5)
+                }
+            }
+            Text("×\(String(format: "%.1f", 1 + GameData.momentumPerStack * Double(game.momentum)))")
+                .font(.data(10))
+                .monospacedDigit()
+                .foregroundStyle(game.momentum > 0 ? Pal.gold : Pal.dim)
+        }
+        .animation(.easeOut(duration: 0.15), value: game.momentum)
+    }
+
     private func bracket(_ corner: Alignment) -> some View {
         BracketShape(corner: corner)
             .stroke(Pal.solar.opacity(0.55), lineWidth: 1)
@@ -227,6 +281,34 @@ struct CombatView: View {
 
     private func healthBar(_ enemy: Enemy) -> some View {
         VStack(spacing: 4) {
+            if let champ = enemy.champion {
+                HStack(spacing: 8) {
+                    Text(champ.label)
+                        .font(.data(9))
+                        .tracking(1.6)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color(hex: champ.hex))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .overlay(Rectangle().stroke(Color(hex: champ.hex).opacity(0.6), lineWidth: 1))
+                    Text(enemy.shielded
+                         ? "Shielded — break with \(champ.breakerLabel) or Super"
+                         : "Shield down · \(Int(ceil(enemy.shieldTimer)))s")
+                        .font(.data(10))
+                        .foregroundStyle(enemy.shielded ? Pal.ash : Pal.gold)
+                    Spacer()
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Pal.plate
+                        Rectangle()
+                            .fill(Color(hex: champ.hex).opacity(enemy.shielded ? 1 : 0.5))
+                            .frame(width: enemy.shielded
+                                   ? geo.size.width
+                                   : geo.size.width * max(0, enemy.shieldTimer / GameData.shieldBreakWindow))
+                    }
+                }
+                .frame(height: 5)
+            }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Pal.plate
@@ -266,13 +348,15 @@ struct CombatView: View {
             : Array(repeating: GridItem(.flexible(), spacing: 6), count: 4)
 
         return VStack(spacing: 6) {
+            momentumMeter
             LazyVGrid(columns: columns, spacing: 6) {
                 AbilityButton(
                     title: game.sub.grenade, key: "Q",
                     detail: "\(Fmt.n(game.grenadeDamage)) burst",
                     progress: cooldownProgress(.grenade),
                     remaining: game.cooldownRemaining(.grenade),
-                    ready: game.canUse(.grenade)
+                    ready: game.canUse(.grenade),
+                    breaksShield: game.breaksShield(.grenade)
                 ) { game.use(.grenade) }
                 .keyboardShortcut("q", modifiers: [])
 
@@ -281,7 +365,8 @@ struct CombatView: View {
                     detail: "\(Fmt.n(game.meleeDamage)) burst",
                     progress: cooldownProgress(.melee),
                     remaining: game.cooldownRemaining(.melee),
-                    ready: game.canUse(.melee)
+                    ready: game.canUse(.melee),
+                    breaksShield: game.breaksShield(.melee)
                 ) { game.use(.melee) }
                 .keyboardShortcut("e", modifiers: [])
 
@@ -290,14 +375,15 @@ struct CombatView: View {
                     detail: "2.2× weapon · 14s",
                     progress: cooldownProgress(.classAbility),
                     remaining: game.cooldownRemaining(.classAbility),
-                    ready: game.canUse(.classAbility)
+                    ready: game.canUse(.classAbility),
+                    breaksShield: game.breaksShield(.classAbility)
                 ) { game.use(.classAbility) }
                 .keyboardShortcut("c", modifiers: [])
 
                 AbilityButton(
                     title: "Fire", key: "Space",
                     detail: "\(Fmt.n(game.clickDamage)) · \(Int(game.critChance * 100))% crit",
-                    progress: 0, remaining: 0, ready: true
+                    progress: 0, remaining: 0, ready: true, breaksShield: false
                 ) { game.fire() }
                 .keyboardShortcut(.space, modifiers: [])
             }
@@ -367,6 +453,7 @@ struct PopupView: View {
         case .hit: return Pal.bone
         case .crit: return Pal.gold
         case .ability: return Pal.arc
+        case .precision: return Pal.gold
         }
     }
 
@@ -375,11 +462,12 @@ struct PopupView: View {
         case .hit: return 16
         case .crit: return 23
         case .ability: return 19
+        case .precision: return 27
         }
     }
 
     var body: some View {
-        Text(popup.text)
+        Text(popup.kind == .precision ? "◎ \(popup.text)" : popup.text)
             .font(.display(size, .bold))
             .foregroundStyle(color)
             .monospacedDigit()
@@ -400,6 +488,7 @@ struct AbilityButton: View {
     let progress: Double
     let remaining: Double
     let ready: Bool
+    var breaksShield: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -448,7 +537,9 @@ struct AbilityButton: View {
                         .padding(.trailing, 9)
                 }
             }
-            .overlay(Rectangle().stroke(ready ? Pal.solar.opacity(0.55) : Pal.rail, lineWidth: 1))
+            .overlay(Rectangle().stroke(
+                breaksShield ? Pal.gold : (ready ? Pal.solar.opacity(0.55) : Pal.rail),
+                lineWidth: breaksShield ? 2 : 1))
         }
         .buttonStyle(.plain)
         .disabled(!ready)

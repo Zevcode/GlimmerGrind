@@ -115,6 +115,63 @@ enum GameData {
                       passive: "Devour: +45% glimmer from kills")
     ]
 
+    // MARK: - Champions
+
+    /// Elite enemies whose shield only yields to one specific ability — the
+    /// mechanic that turns the ability bar from a cooldown dump into a rotation.
+    enum ChampionKind: String, CaseIterable, Codable {
+        case barrier, overload, unstoppable
+
+        var label: String {
+            switch self {
+            case .barrier: return "Barrier"
+            case .overload: return "Overload"
+            case .unstoppable: return "Unstoppable"
+            }
+        }
+
+        /// Matches `Game.Ability.rawValue`. Super breaks every kind, which is
+        /// what makes it worth holding rather than dumping on cooldown.
+        var breakerRaw: String {
+            switch self {
+            case .overload: return "grenade"
+            case .unstoppable: return "melee"
+            case .barrier: return "class"
+            }
+        }
+
+        var breakerLabel: String {
+            switch self {
+            case .overload: return "Grenade"
+            case .unstoppable: return "Melee"
+            case .barrier: return "Class"
+            }
+        }
+
+        var hex: UInt32 {
+            switch self {
+            case .barrier: return 0x5A8FE0
+            case .overload: return 0xB366E8
+            case .unstoppable: return 0xE0574F
+            }
+        }
+    }
+
+    /// Shield mechanics.
+    static let championHPMultiplier = 2.5
+    static let championRewardMultiplier = 3.0
+    static let shieldedDamageMultiplier = 0.10   // while the shield holds
+    static let brokenDamageMultiplier = 1.50     // during the break window
+    static let shieldBreakWindow = 8.0
+
+    /// Precision and momentum.
+    static let precisionMultiplier = 3.5
+    static let momentumCap = 8
+    static let momentumPerStack = 0.10
+    static let momentumDecayInterval = 0.5
+    static let weakenedDuration = 6.0
+    static let weakenedMultiplier = 1.25
+
     // MARK: - Gear
 
     enum SlotKind: String, Codable, CaseIterable {

@@ -58,6 +58,29 @@ auto-dismantles overflow. Three subclasses swap your passive and your whole
 ability kit. At sector 100 you can **Reset Light** for Legendary Shards and
 spend them across seven permanent upgrade tracks.
 
+### Combat
+
+Three mechanics give the trigger pull something to think about:
+
+**Precision.** A weak point drifts across the enemy sigil. Hitting it deals
+3.5× damage, builds momentum twice as fast and floods super energy. Body shots
+still work; they just pay less.
+
+**Momentum.** Every hit you land adds a stack, up to eight, each worth +10%
+weapon damage. Stop firing and it bleeds off one stack every half second — a
+decay, not a cliff. Auto-shots never build it.
+
+**Champions.** Elite enemies carry a shield that cuts *all* incoming damage —
+yours and the fireteam's — to a tenth. It only yields to one specific ability:
+Overload to your grenade, Unstoppable to your melee, Barrier to your class
+ability. Your Super breaks any of them, which is what makes it worth holding
+rather than dumping on cooldown. Break the shield and you get an eight-second
+window at +50% damage before it re-forms. A Champion left to idle DPS simply
+stalls.
+
+Grenades also apply **Weakened** for six seconds (+25% damage taken), so the
+opener is worth sequencing rather than firing blind.
+
 Keys — `Space` fire · `Q` grenade · `E` melee · `C` class ability · `R` super.
 
 ## Tests
@@ -66,8 +89,9 @@ Keys — `Space` fire · `Q` grenade · `E` melee · `C` class ability · `R` su
 ./run-tests.sh
 ```
 
-39 checks covering the progression curve, the participation rule, hiring,
-loot rolls, abilities, prestige and save round-tripping. `Model/` has no SwiftUI
+61 checks covering the progression curve, the participation rule, precision and
+momentum, Champion shields, hiring, loot rolls, abilities, prestige and save
+round-tripping. `Model/` has no SwiftUI
 dependency, so the whole simulation runs headlessly in a CLI — no Xcode, no test
 framework. The suite uses an explicit `check` rather than `assert`, because
 `assert` is compiled out under `-O` and would silently pass everything.
@@ -89,8 +113,13 @@ Sources/GlimmerGrind/
     Sheets.swift          item inspect, subclass, reset, record
 Tests/EngineTests.swift   headless engine tests
 Tools/make-icon.swift     renders AppIcon.icns with CoreGraphics
-web/glimmer-grind.html    a standalone browser build of the same game
+Tools/AppIcon.icns        generated, not committed
+web/glimmer-grind.html    the original browser prototype (frozen)
 ```
+
+`web/glimmer-grind.html` is the browser prototype this started as. It is still
+playable and self-contained, but the macOS app is the current build and the two
+no longer track each other.
 
 Nothing under `Model/` imports SwiftUI, so the engine runs and tests headlessly.
 Every proper noun in the game lives in `GameData.swift` — renaming the whole

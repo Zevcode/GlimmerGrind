@@ -92,6 +92,155 @@ func runTests() {
               abil.killsInZone > abilBefore || abil.zone > 1)
     }
 
+    section("Precision and momentum")
+    do {
+        let g = stocked()
+        // A drifting weak point must never leave the sigil.
+        var moved = false
+        let origin = g.weakPoint
+        var maxRadius = 0.0
+        for _ in 0..<1000 {
+            g.tick(0.05)
+            let r = (g.weakPoint.x * g.weakPoint.x + g.weakPoint.y * g.weakPoint.y).squareRoot()
+            maxRadius = Swift.max(maxRadius, r)
+            if g.weakPoint != origin { moved = true }
+        }
+        check("weak point drifts", moved)
+        check("weak point stays on the sigil", maxRadius <= 0.801,
+              String(format: "reached %.3f", maxRadius))
+
+        // Isolate the multiplier: pin momentum at cap so it cannot skew the ramp.
+        func meanDamage(precision: Bool) -> Double {
+            let t = stocked()
+            t.zone = 60
+            t.spawn()
+            t.enemy?.champion = nil
+            t.enemy?.shielded = false
+            t.momentum = GameData.momentumCap
+            let before = t.stats.damage
+            for _ in 0..<400 { t.momentum = GameData.momentumCap; t.fire(precision: precision) }
+            return (t.stats.damage - before) / 400
+        }
+        let ratio = meanDamage(precision: true) / meanDamage(precision: false)
+        check("precision multiplier is a real bonus", ratio > 1.5,
+              String(format: "%.2fx", ratio))
+
+        let m = stocked()
+        m.momentum = 0
+        for _ in 0..<3 { m.fire() }
+        check("momentum builds on hits", m.momentum >= 3, "\(m.momentum)")
+        for _ in 0..<50 { m.fire() }
+        check("momentum caps", m.momentum == GameData.momentumCap, "\(m.momentum)")
+        let boosted = m.clickDamage
+        for _ in 0..<200 { m.tick(0.05) }   // 10s without firing
+        check("momentum decays when you stop", m.momentum == 0, "\(m.momentum)")
+        check("decayed momentum lowers damage", m.clickDamage < boosted)
+
+        let auto = stocked()
+        auto.momentum = 0
+        for _ in 0..<5 { auto.fire(manual: false) }
+        check("auto-shots build no momentum", auto.momentum == 0, "\(auto.momentum)")
+    }
+
+    section("Champions")
+    do {
+        let early = stocked()
+        var earlyChampions = 0
+        for _ in 0..<400 { early.zone = 3; early.spawn(); if early.enemy?.champion != nil { earlyChampions += 1 } }
+        check("no champions before sector 8", earlyChampions == 0, "\(earlyChampions) seen")
+
+        let late = stocked()
+        var lateChampions = 0
+        for _ in 0..<600 { late.zone = 12; late.spawn(); if late.enemy?.champion != nil { lateChampions += 1 } }
+        check("champions appear past sector 8", lateChampions > 0, "\(lateChampions) in 600")
+
+        let boss = stocked()
+        boss.zone = 20; boss.spawn()
+        check("bosses below 25 are not champions", boss.enemy?.champion == nil)
+        boss.zone = 25; boss.spawn()
+        check("bosses from 25 are champions", boss.enemy?.champion != nil)
+
+        // Shield blunts damage until the right ability lands.
+        func shieldedGame(_ kind: GameData.ChampionKind) -> Game {
+            let g = stocked()
+            g.zone = 12
+            g.spawn()
+            g.enemy?.champion = kind
+            g.enemy?.shielded = true
+            g.enemy?.hp = 1e18
+            g.enemy?.maxHP = 1e18
+            return g
+        }
+
+        let sh = shieldedGame(.overload)
+        let hpBefore = sh.enemy!.hp
+        sh.fire()
+        let shieldedHit = hpBefore - sh.enemy!.hp
+        sh.enemy?.shielded = false
+        sh.enemy?.shieldTimer = 8
+        let hpMid = sh.enemy!.hp
+        sh.fire()
+        let brokenHit = hpMid - sh.enemy!.hp
+        check("a held shield blunts damage", brokenHit > shieldedHit * 5,
+              String(format: "%.0f vs %.0f", shieldedHit, brokenHit))
+
+        let wrong = shieldedGame(.overload)
+        wrong.use(.melee)                       // Overload does not yield to melee
+        check("the wrong ability does not break the shield", wrong.enemy?.shielded == true)
+
+        let right = shieldedGame(.overload)
+        right.use(.grenade)                     // Overload yields to grenades
+        check("the matching ability breaks the shield", right.enemy?.shielded == false)
+
+        let unstoppable = shieldedGame(.unstoppable)
+        unstoppable.use(.melee)
+        check("Unstoppable yields to melee", unstoppable.enemy?.shielded == false)
+
+        let barrier = shieldedGame(.barrier)
+        barrier.use(.classAbility)
+        check("Barrier yields to the class ability", barrier.enemy?.shielded == false)
+
+        var superBreaksAll = true
+        for kind in GameData.ChampionKind.allCases {
+            let g = shieldedGame(kind)
+            g.superEnergy = 100
+            g.use(.superAbility)
+            if g.enemy?.shielded != false { superBreaksAll = false }
+        }
+        check("Super breaks every champion kind", superBreaksAll)
+
+        // The shield re-forms when the window closes.
+        let reform = shieldedGame(.overload)
+        reform.use(.grenade)
+        for _ in 0..<Int(GameData.shieldBreakWindow / 0.05) + 10 { reform.tick(0.05) }
+        check("the shield re-forms after the window", reform.enemy?.shielded == true)
+    }
+
+    section("Weakened")
+    do {
+        let g = stocked()
+        g.zone = 40
+        g.spawn()
+        g.enemy?.champion = nil
+        g.enemy?.hp = 1e18
+        g.enemy?.maxHP = 1e18
+        g.momentum = GameData.momentumCap
+
+        var plain = 0.0
+        for _ in 0..<200 { g.momentum = GameData.momentumCap
+            let b = g.enemy!.hp; g.fire(); plain += b - g.enemy!.hp }
+
+        g.enemy?.weakened = GameData.weakenedDuration
+        var weak = 0.0
+        for _ in 0..<200 { g.momentum = GameData.momentumCap
+            let b = g.enemy!.hp; g.fire(); weak += b - g.enemy!.hp }
+
+        check("Weakened raises damage taken", weak > plain * 1.1,
+              String(format: "%.0f vs %.0f", plain, weak))
+        for _ in 0..<Int(GameData.weakenedDuration / 0.05) + 10 { g.tick(0.05) }
+        check("Weakened expires", (g.enemy?.weakened ?? 0) == 0)
+    }
+
     section("Fireteam")
     do {
         let g = stocked(0, glimmer: 1e6)
@@ -180,6 +329,17 @@ func runTests() {
         check("shards round-trip", reloaded.shards == 7, "got \(reloaded.shards)")
         reloaded.wipeSave()
         check("wipe clears the save", Game().zone == 1)
+
+        // Combat state is session-only; letting it into SaveState would break
+        // every existing save on disk.
+        let probe = SaveState(zone: 1, kills: 0, glimmer: 0, shards: 0, shardPerks: [:],
+                              stats: Stats(), best: 1, runBest: 1, team: [], gear: [:],
+                              postmaster: [], subclass: .solar, superEnergy: 0, lastSeen: Date())
+        let json = String(data: try! JSONEncoder().encode(probe), encoding: .utf8) ?? ""
+        let leaked = ["champion", "shielded", "weakPoint", "momentum", "weakened"]
+            .filter { json.contains($0) }
+        check("no combat state leaked into the save format", leaked.isEmpty,
+              "leaked \(leaked)")
     }
 
     print("\n\(passed) passed, \(failed) failed")
