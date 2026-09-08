@@ -57,6 +57,31 @@ struct GuardianRow: View {
     private var cost: Double { game.unitCost(index, count: count) }
     private var affordable: Bool { game.glimmer >= cost }
 
+    /// Sits on the row's second line so every row is the same height.
+    @ViewBuilder private var upgradeChip: some View {
+        if let threshold = game.upgradeThreshold(index), unit.level > 0 {
+            let reached = unit.level >= threshold
+            let enabled = game.canUpgrade(index)
+            if reached {
+                Button { game.upgrade(index) } label: {
+                    Text("✦ \(Fmt.n(game.upgradeCost(index)))")
+                        .font(.data(9))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(enabled ? Pal.solar.opacity(0.15) : Pal.dim.opacity(0.10))
+                        .foregroundStyle(enabled ? Pal.solar : Pal.dim)
+                        .overlay(Rectangle().stroke(
+                            enabled ? Pal.solar.opacity(0.35) : Pal.dim.opacity(0.2), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(!enabled)
+            } else {
+                Text("✦ Lv \(threshold)")
+                    .font(.data(9))
+                    .foregroundStyle(Pal.dim.opacity(0.7))
+            }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Button { game.buy(index) } label: {
@@ -78,15 +103,18 @@ struct GuardianRow: View {
                                     .foregroundStyle(Pal.solar)
                             }
                         }
-                        Text(unit.level > 0 ? "\(Fmt.n(game.unitDPS(index))) dps" : def.role)
-                            .font(.data(9.5))
-                            .foregroundStyle(Pal.dim)
+                        HStack(spacing: 6) {
+                            Text(unit.level > 0 ? "\(Fmt.n(game.unitDPS(index))) dps" : def.role)
+                                .font(.data(9.5))
+                                .foregroundStyle(Pal.dim)
+                            upgradeChip
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    VStack(alignment: .trailing, spacing: 0) {
+                    VStack(alignment: .trailing, spacing: 1) {
                         Text(Fmt.n(cost))
-                            .font(.display(11.5, .semibold))
+                            .font(.value)
                             .foregroundStyle(affordable ? Pal.ok : Pal.glimmer)
                             .monospacedDigit()
                         if game.buyAmount == .max {
@@ -95,40 +123,11 @@ struct GuardianRow: View {
                     }
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 9)
+                .frame(height: 56)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .opacity(affordable || unit.level > 0 ? 1 : 0.55)
-
-            if let threshold = game.upgradeThreshold(index), unit.level > 0 {
-                let reached = unit.level >= threshold
-                let enabled = game.canUpgrade(index)
-                HStack {
-                    if reached {
-                        Button { game.upgrade(index) } label: {
-                            Text("✦ DOUBLE DPS · \(Fmt.n(game.upgradeCost(index)))")
-                                .font(.data(9.5))
-                                .tracking(0.6)
-                                .padding(.horizontal, 7).padding(.vertical, 3)
-                                .background(enabled ? Pal.solar.opacity(0.13) : Pal.dim.opacity(0.10))
-                                .foregroundStyle(enabled ? Pal.solar : Pal.dim)
-                                .overlay(Rectangle().stroke(
-                                    enabled ? Pal.solar.opacity(0.3) : Pal.dim.opacity(0.2), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!enabled)
-                    } else {
-                        Text("✦ at Lv \(threshold)")
-                            .font(.data(9))
-                            .tracking(0.6)
-                            .foregroundStyle(Pal.dim)
-                    }
-                    Spacer()
-                }
-                .padding(.leading, 53)
-                .padding(.bottom, 9)
-            }
 
             Pal.rail.opacity(0.5).frame(height: 1)
         }
@@ -208,8 +207,9 @@ struct GearPanel: View {
                 .tracking(1)
                 .foregroundStyle(Pal.dim)
                 .multilineTextAlignment(.center)
-                .padding(.vertical, 22)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, alignment: .top)
+                Spacer(minLength: 0)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -219,8 +219,64 @@ struct GearPanel: View {
                     }
                 }
             }
+
+            StatSheet(game: game)
+                .layoutPriority(1)
         }
         .panel()
+    }
+}
+
+/// Ten perk types feed numbers you could never see. This shows them.
+struct StatSheet: View {
+    let game: Game
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Character").font(.header).tracking(2.2).textCase(.uppercase)
+                Spacer()
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(LinearGradient(colors: [Pal.plate, .clear],
+                                       startPoint: .top, endPoint: .bottom))
+            .overlay(alignment: .top) { Pal.rail.frame(height: 1) }
+
+            VStack(spacing: 0) {
+                group("Combat", [
+                    ("Crit", String(format: "%.1f%% · ×%.2f", game.critChance * 100, game.critMult), Pal.bone),
+                    ("Weapon damage", plus(game.gearStat(.click)), Pal.bone),
+                    ("Ability damage", plus(game.gearStat(.abilityDamage)), Pal.bone),
+                    ("Boss damage", plus(game.gearStat(.bossDamage)), Pal.bone)
+                ])
+                group("Economy", [
+                    ("Glimmer", String(format: "×%.2f", game.glimmerMult), Pal.glimmer),
+                    ("Fireteam damage", plus(game.gearStat(.teamDamage)), Pal.bone),
+                    ("Cooldowns", String(format: "×%.2f", game.cooldownMult), Pal.bone),
+                    ("Rare drops", plus(game.gearStat(.luck)), Pal.bone)
+                ])
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func plus(_ v: Double) -> String {
+        v == 0 ? "—" : String(format: "+%.0f%%", v)
+    }
+
+    @ViewBuilder
+    private func group(_ title: String, _ rows: [(String, String, Color)]) -> some View {
+        Text(title).hudLabel().padding(.top, 6).frame(maxWidth: .infinity, alignment: .leading)
+        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            HStack {
+                Text(row.0).font(.data(10)).foregroundStyle(Pal.ash)
+                Spacer()
+                Text(row.1).font(.value).foregroundStyle(row.2).monospacedDigit()
+            }
+            .padding(.vertical, 1.5)
+        }
     }
 }
 
@@ -236,10 +292,15 @@ struct SlotTile: View {
         } label: {
             VStack(alignment: .leading, spacing: 1) {
                 Text(slot.label).hudLabel()
-                Text(item?.name ?? "Empty")
-                    .font(.display(11.5, .semibold))
-                    .foregroundStyle(item.map { Color(hex: $0.rarityDef.hex) } ?? Pal.dim)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(item?.name ?? "Empty")
+                        .font(.display(11.5, .semibold))
+                        .foregroundStyle(item.map { Color(hex: $0.rarityDef.hex) } ?? Pal.dim)
+                        .lineLimit(1)
+                    if item?.hasCatalyst == true {
+                        Text("◆").font(.data(9)).foregroundStyle(Pal.gold)
+                    }
+                }
                 Text(item.map { "\($0.power) · \($0.type)" } ?? "—")
                     .font(.data(10))
                     .foregroundStyle(Pal.ash)

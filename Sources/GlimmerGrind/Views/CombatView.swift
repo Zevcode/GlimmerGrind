@@ -23,6 +23,7 @@ enum Haptics {
 struct CombatView: View {
     let game: Game
     var compact: Bool
+    @State private var breathing = false
 
     private var faction: Color { Color(hex: game.enemy?.area.hex ?? game.area.hex) }
 
@@ -132,6 +133,18 @@ struct CombatView: View {
 
                         VStack(spacing: 9) {
                             ZStack {
+                                // Grounds the sigil so it sits in a space
+                                // instead of floating on a flat field.
+                                Ellipse()
+                                    .fill(RadialGradient(
+                                        colors: [Pal.void.opacity(0.75), .clear],
+                                        center: .center, startRadius: 0,
+                                        endRadius: (compact ? 120 : 176) * 0.45))
+                                    .frame(width: (compact ? 120 : 176) * 0.9,
+                                           height: (compact ? 120 : 176) * 0.22)
+                                    .offset(y: (compact ? 120 : 176) * 0.52)
+                                    .allowsHitTesting(false)
+
                                 FactionGlyph(faction: enemy.area.faction)
                                     .foregroundStyle(faction)
                                     .shadow(color: faction.opacity(0.55), radius: 28)
@@ -154,7 +167,9 @@ struct CombatView: View {
                         }
                         .allowsHitTesting(false)
                         .scaleEffect(1 - game.hitPulse * 0.025)
-                        .offset(y: game.hitPulse * 2)
+                        .offset(y: game.hitPulse * 2 + (breathing ? -4 : 4))
+                        .animation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true),
+                                   value: breathing)
 
                         Spacer(minLength: 0)
 
@@ -184,7 +199,8 @@ struct CombatView: View {
         }
         .frame(minHeight: compact ? 260 : 230)
         .frame(maxHeight: .infinity)
-        .panel()
+        .panel(elevated: true)
+        .onAppear { breathing = true }
         .overlay(alignment: .top) { buffStrip }
         #if os(macOS)
         .onHover { inside in
@@ -255,13 +271,27 @@ struct CombatView: View {
     private var momentumMeter: some View {
         HStack(spacing: 8) {
             Text("Momentum").hudLabel()
-            HStack(spacing: 2) {
-                ForEach(0..<GameData.momentumCap, id: \.self) { i in
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Pal.plate
                     Rectangle()
-                        .fill(i < game.momentum ? Pal.solar : Pal.rail)
-                        .frame(height: 5)
+                        .fill(LinearGradient(colors: [Pal.ember, Pal.solar, Pal.gold],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width
+                               * Double(game.momentum) / Double(GameData.momentumCap))
+                    HStack(spacing: 0) {
+                        ForEach(1..<GameData.momentumCap, id: \.self) { _ in
+                            Spacer()
+                            Rectangle().fill(Pal.void.opacity(0.6)).frame(width: 1)
+                        }
+                        Spacer()
+                    }
                 }
+                .overlay(Rectangle().stroke(Pal.rail, lineWidth: 1))
+                .shadow(color: game.momentum == GameData.momentumCap
+                        ? Pal.gold.opacity(0.5) : .clear, radius: 6)
             }
+            .frame(height: 7)
             Text("×\(String(format: "%.1f", 1 + GameData.momentumPerStack * Double(game.momentum)))")
                 .font(.data(10))
                 .monospacedDigit()
@@ -310,19 +340,43 @@ struct CombatView: View {
                 .frame(height: 5)
             }
             GeometryReader { geo in
+                let full = geo.size.width
+                let live = full * max(0, enemy.hp) / enemy.maxHP
+                let trail = full * max(0, min(game.hpTrail, enemy.maxHP)) / enemy.maxHP
                 ZStack(alignment: .leading) {
                     Pal.plate
+
+                    // Chip trail — lags the real value, so a big hit reads as impact.
+                    Rectangle()
+                        .fill(Pal.bone.opacity(0.30))
+                        .frame(width: trail)
+
                     LinearGradient(
                         colors: enemy.isBoss
                             ? [Color(hex: 0x6E1B18), Pal.bad]
-                            : [faction.opacity(0.42), faction],
+                            : [faction.opacity(0.45), faction],
                         startPoint: .leading, endPoint: .trailing
                     )
-                    .frame(width: geo.size.width * max(0, enemy.hp) / enemy.maxHP)
+                    .frame(width: live)
+
+                    // Leading edge.
+                    Rectangle()
+                        .fill(Pal.bone.opacity(0.85))
+                        .frame(width: 1.5)
+                        .offset(x: max(0, live - 1.5))
+
+                    // Decade ticks.
+                    HStack(spacing: 0) {
+                        ForEach(1..<10, id: \.self) { _ in
+                            Spacer()
+                            Rectangle().fill(Pal.void.opacity(0.5)).frame(width: 1)
+                        }
+                        Spacer()
+                    }
                 }
                 .overlay(Rectangle().stroke(Pal.rail, lineWidth: 1))
             }
-            .frame(height: 13)
+            .frame(height: 15)
 
             HStack {
                 Text("\(Fmt.n(max(0, enemy.hp))) / \(Fmt.n(enemy.maxHP))")

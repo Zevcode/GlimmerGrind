@@ -82,6 +82,22 @@ stalls.
 Grenades also apply **Weakened** for six seconds (+25% damage taken), so the
 opener is worth sequencing rather than firing blind.
 
+### Bounties and catalysts
+
+Three **bounties** sit on the board at once — precision hits, Champion shields
+broken, sectors cleared, engrams decrypted — paying glimmer, and occasionally a
+Legendary Shard for the harder ones. Claim a finished bounty and another is
+issued.
+
+Equipped weapons level toward a **catalyst** on kills you took part in; idle
+kills never count. At six hundred credited kills the weapon rolls an extra perk
+at Exotic magnitude and keeps it. That is the first real tension in the loot
+loop: a levelled favourite against a higher-power drop.
+
+The **Character** panel shows what your gear is actually doing — crit, weapon,
+ability and boss damage, glimmer, cooldowns and drop rate — numbers that ten
+perk types used to feed invisibly.
+
 Keys — `Space` fire · `Q` grenade · `E` melee · `C` class ability · `R` super.
 
 ## Tests
@@ -90,9 +106,10 @@ Keys — `Space` fire · `Q` grenade · `E` melee · `C` class ability · `R` su
 ./run-tests.sh
 ```
 
-61 checks covering the progression curve, the participation rule, precision and
-momentum, Champion shields, hiring, loot rolls, abilities, prestige and save
-round-tripping. `Model/` has no SwiftUI
+87 checks covering the progression curve, the participation rule, precision and
+momentum, Champion shields, bounties, catalysts, hiring, loot rolls, abilities,
+prestige, and save round-tripping — including that a save written before any of
+these features existed still decodes. `Model/` has no SwiftUI
 dependency, so the whole simulation runs headlessly in a CLI — no Xcode, no test
 framework. The suite uses an explicit `check` rather than `assert`, because
 `assert` is compiled out under `-O` and would silently pass everything.

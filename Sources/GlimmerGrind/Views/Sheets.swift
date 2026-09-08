@@ -16,6 +16,8 @@ struct SheetHost: View {
                 ResetSheet(game: game, sheet: $sheet)
             case .record:
                 RecordSheet(game: game, sheet: $sheet)
+            case .bounties:
+                BountiesSheet(game: game, sheet: $sheet)
             }
         }
         #if os(macOS)
@@ -26,7 +28,7 @@ struct SheetHost: View {
     }
 }
 
-private struct SheetChrome<Content: View, Footer: View>: View {
+struct SheetChromePublic<Content: View, Footer: View>: View {
     let title: String
     @Binding var sheet: ActiveSheet?
     @ViewBuilder var content: Content
@@ -72,7 +74,7 @@ struct ItemSheet: View {
     @Binding var sheet: ActiveSheet?
 
     var body: some View {
-        SheetChrome(title: fromPostmaster ? "Engram Decrypted" : "Equipped", sheet: $sheet) {
+        SheetChromePublic(title: fromPostmaster ? "Engram Decrypted" : "Equipped", sheet: $sheet) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 14) {
                     EngramView(rarity: item.rarity, size: 58)
@@ -112,6 +114,42 @@ struct ItemSheet: View {
                     }
                     .padding(.vertical, 7)
                     .overlay(alignment: .bottom) { Pal.rail.opacity(0.45).frame(height: 1) }
+                }
+
+                if item.canHaveCatalyst {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(item.hasCatalyst ? "Catalyst complete" : "Catalyst")
+                                .font(.data(10)).tracking(1.6).textCase(.uppercase)
+                                .foregroundStyle(item.hasCatalyst ? Pal.gold : Pal.dim)
+                            Spacer()
+                            if !item.hasCatalyst {
+                                Text("\(Int(item.catalystProgress)) / \(Int(GameData.catalystThreshold)) kills")
+                                    .font(.data(10)).foregroundStyle(Pal.ash).monospacedDigit()
+                            }
+                        }
+                        if let cat = item.catalystPerk {
+                            HStack(spacing: 10) {
+                                Text("◆ \(cat.name)").font(.display(12.5, .semibold))
+                                    .foregroundStyle(Pal.gold)
+                                Text("+\(fmtValue(cat.value))% \(cat.desc)")
+                                    .font(.data(11)).foregroundStyle(Pal.solar)
+                                Spacer()
+                            }
+                        } else {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Pal.plate
+                                    Rectangle().fill(Pal.gold.opacity(0.8))
+                                        .frame(width: geo.size.width
+                                               * min(1, item.catalystProgress / GameData.catalystThreshold))
+                                }
+                                .overlay(Rectangle().stroke(Pal.rail, lineWidth: 1))
+                            }
+                            .frame(height: 6)
+                        }
+                    }
+                    .padding(.top, 4)
                 }
 
                 if let current = game.gear[item.slot], current.id != item.id {
@@ -161,7 +199,7 @@ struct SubclassSheet: View {
     @Binding var sheet: ActiveSheet?
 
     var body: some View {
-        SheetChrome(title: "Subclass", sheet: $sheet) {
+        SheetChromePublic(title: "Subclass", sheet: $sheet) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Reattune your Light. Swapping is free and instant — your abilities and passive change with it.")
                     .font(.body)
@@ -217,7 +255,7 @@ struct ResetSheet: View {
     @Binding var sheet: ActiveSheet?
 
     var body: some View {
-        SheetChrome(title: "Reset Light", sheet: $sheet) {
+        SheetChromePublic(title: "Reset Light", sheet: $sheet) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Give your Light back to the Traveler. Fireteam, gear and glimmer are lost; Legendary Shards and everything bought with them are kept forever.")
                     .font(.body)
@@ -297,7 +335,7 @@ struct RecordSheet: View {
     @State private var confirmWipe = false
 
     var body: some View {
-        SheetChrome(title: "Vanguard Record", sheet: $sheet) {
+        SheetChromePublic(title: "Vanguard Record", sheet: $sheet) {
             VStack(alignment: .leading, spacing: 16) {
                 StatGrid(pairs: [
                     ("Deepest sector", "\(game.best)", Pal.bone),
@@ -364,5 +402,67 @@ struct StatGrid: View {
             }
         }
         .background(Pal.rail)
+    }
+}
+
+
+// MARK: - Bounties
+
+struct BountiesSheet: View {
+    let game: Game
+    @Binding var sheet: ActiveSheet?
+
+    var body: some View {
+        SheetChromePublic(title: "Bounties", sheet: $sheet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Three at a time. Claim a completed bounty and another is issued.")
+                    .font(.body)
+                    .foregroundStyle(Pal.ash)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(game.bounties) { bounty in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(bounty.kind.label)
+                                .font(.display(13, .semibold))
+                            Spacer()
+                            Text("\(Int(min(bounty.progress, bounty.target))) / \(Int(bounty.target))")
+                                .font(.data(10.5))
+                                .monospacedDigit()
+                                .foregroundStyle(bounty.complete ? Pal.ok : Pal.ash)
+                        }
+
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Pal.plate
+                                Rectangle()
+                                    .fill(bounty.complete ? Pal.ok : Pal.solar)
+                                    .frame(width: geo.size.width * bounty.fraction)
+                            }
+                            .overlay(Rectangle().stroke(Pal.rail, lineWidth: 1))
+                        }
+                        .frame(height: 6)
+
+                        HStack {
+                            Text("+\(Fmt.n(bounty.rewardGlimmer)) glimmer"
+                                 + (bounty.rewardShards > 0 ? "  ·  +\(bounty.rewardShards) ◈" : ""))
+                                .font(.data(10))
+                                .foregroundStyle(bounty.rewardShards > 0 ? Pal.shard : Pal.glimmer)
+                            Spacer()
+                            if bounty.complete {
+                                Button("Claim") { game.claimBounty(bounty.id) }
+                                    .buttonStyle(HudButtonStyle(hot: true))
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(Pal.hull)
+                    .overlay(Rectangle().stroke(
+                        bounty.complete ? Pal.ok.opacity(0.5) : Pal.rail, lineWidth: 1))
+                }
+            }
+        } footer: {
+            EmptyView()
+        }
     }
 }

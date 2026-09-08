@@ -37,7 +37,7 @@ struct GlyphShape: Shape {
             line(&p, (50, 78), (30, 62))
             line(&p, (50, 78), (70, 62))
         case (.fallen, true):
-            p = Path()
+            poly(&p, [(50, 34), (60, 50), (50, 66), (40, 50)])
 
         case (.cabal, false):
             poly(&p, [(22, 14), (78, 14), (92, 36), (78, 58), (22, 58), (8, 36)])
@@ -51,7 +51,7 @@ struct GlyphShape: Shape {
             line(&p, (50, 40), (50, 60))
             line(&p, (40, 50), (60, 50))
         case (.hive, true):
-            p = Path()
+            poly(&p, [(50, 38), (61, 50), (50, 62), (39, 50)])
 
         case (.vex, false):
             poly(&p, [(50, 8), (86, 29), (86, 71), (50, 92), (14, 71), (14, 29)])
@@ -64,21 +64,22 @@ struct GlyphShape: Shape {
             p.addEllipse(in: CGRect(x: pt(43, 43).x, y: pt(43, 43).y, width: 14 * s, height: 14 * s))
 
         case (.taken, false):
-            poly(&p, [(50, 4), (78, 50), (50, 96), (22, 50)])
-            line(&p, (8, 50), (28, 50))
-            line(&p, (72, 50), (92, 50))
-            line(&p, (50, 4), (50, 18))
-            line(&p, (50, 82), (50, 96))
+            // Eight-point star: the spikes now grow out of the diamond instead
+            // of hovering beside it.
+            poly(&p, [(50, 4), (64, 34), (94, 50), (64, 66),
+                      (50, 96), (36, 66), (6, 50), (36, 34)])
         case (.taken, true):
-            poly(&p, [(50, 30), (62, 50), (50, 70), (38, 50)])
+            poly(&p, [(50, 30), (63, 50), (50, 70), (37, 50)])
 
         case (.scorn, false):
-            poly(&p, [(50, 6), (74, 26), (66, 54), (50, 94), (34, 54), (26, 26)])
-            line(&p, (6, 40), (26, 46))
-            line(&p, (94, 40), (74, 46))
-            line(&p, (50, 40), (50, 74))
+            // Barbed and asymmetric, but a single closed silhouette — the old
+            // version drew two strokes that never touched the body.
+            poly(&p, [(50, 4), (62, 26), (84, 30), (72, 50),
+                      (80, 76), (58, 70), (50, 96), (42, 70),
+                      (20, 76), (28, 50), (16, 30), (38, 26)])
+            line(&p, (50, 30), (50, 66))
         case (.scorn, true):
-            p = Path()
+            poly(&p, [(50, 34), (59, 52), (50, 68), (41, 52)])
         }
 
         return p

@@ -21,7 +21,49 @@ struct Item: Codable, Identifiable, Hashable {
     var power: Int
     var perks: [Perk]
 
+    // Catalysts. These MUST stay Optional: the synthesised decoder does not fall
+    // back to defaults for missing keys, and load() swallows errors with `try?`
+    // — a non-optional field here silently wipes every existing save.
+    var catalystXP: Double?
+    var catalystPerk: Perk?
+
     var rarityDef: GameData.RarityDef { GameData.rarities[rarity] }
+
+    var catalystProgress: Double { catalystXP ?? 0 }
+    var hasCatalyst: Bool { catalystPerk != nil }
+    var canHaveCatalyst: Bool { slot.isWeapon }
+    /// Everything contributing to your stats, catalyst included.
+    var allPerks: [Perk] { perks + (catalystPerk.map { [$0] } ?? []) }
+}
+
+// MARK: - Bounties
+
+enum BountyKind: String, Codable, CaseIterable {
+    case kills, precisionHits, shieldsBroken, sectorsCleared, engrams, abilityCasts
+
+    var label: String {
+        switch self {
+        case .kills: return "Combatants defeated"
+        case .precisionHits: return "Precision hits"
+        case .shieldsBroken: return "Champion shields broken"
+        case .sectorsCleared: return "Sectors cleared"
+        case .engrams: return "Engrams decrypted"
+        case .abilityCasts: return "Abilities cast"
+        }
+    }
+}
+
+struct BountyState: Codable, Identifiable, Hashable {
+    var id: String = UUID().uuidString
+    var kind: BountyKind
+    var target: Double
+    var progress: Double = 0
+    var rewardGlimmer: Double
+    var rewardShards: Int
+    var claimed: Bool = false
+
+    var complete: Bool { progress >= target }
+    var fraction: Double { Swift.min(1, progress / target) }
 }
 
 struct UnitState: Codable {
@@ -70,6 +112,9 @@ struct SaveState: Codable {
     var subclass: GameData.Subclass
     var superEnergy: Double
     var lastSeen: Date
+    /// Optional for the same reason as Item.catalystXP — saves written before
+    /// bounties existed must still decode.
+    var bounties: [BountyState]?
 }
 
 enum BuyAmount: Hashable { case one, ten, hundred, max }
@@ -132,6 +177,7 @@ final class Game {
     var subclass: GameData.Subclass = .solar
     var superEnergy: Double = 0
     var lastSeen: Date = Date()
+    var bounties: [BountyState] = []
 
     // session
     var enemy: Enemy?
@@ -148,6 +194,9 @@ final class Game {
     var weakPoint: CGPoint = .zero
     private var weakVelocity: CGPoint = .zero
 
+    /// Lags the real health value so a heavy hit leaves a visible trail.
+    var hpTrail: Double = 0
+
     /// Stacks of sustained fire. Builds on every player hit, decays when you stop.
     var momentum: Int = 0
     private var momentumDecay: Double = 0
@@ -160,6 +209,7 @@ final class Game {
 
     init() {
         if !load() {
+            refillBounties()
             spawn()
             addLog("Ghost online. Hostiles inbound in the <Cosmodrome>.")
             addLog("Sectors advance only on kills you <join>. The fireteam farms glimmer while you idle.")
@@ -185,7 +235,7 @@ final class Game {
         var total: Double = 0
         for slot in GameData.SlotKind.allCases {
             guard let item = gear[slot] else { continue }
-            for perk in item.perks where perk.key == key { total += perk.value }
+            for perk in item.allPerks where perk.key == key { total += perk.value }
         }
         return total
     }
@@ -303,6 +353,7 @@ final class Game {
         enemy = Enemy(hp: hp, maxHP: hp, isBoss: boss, name: name, rank: finalRank,
                       area: a, timer: boss ? 30 : 0,
                       champion: champion, shielded: champion != nil)
+        hpTrail = hp
         seedWeakPoint()
     }
 
@@ -366,6 +417,9 @@ final class Game {
             return
         }
 
+        recordBounty(.kills)
+        awardCatalystXP()
+
         if boss {
             stats.bosses += 1
             addLog("<Sector \(zone)> cleared — \(e.name) down.")
@@ -381,6 +435,7 @@ final class Game {
         killsInZone = 0
         best = Swift.max(best, zone)
         runBest = Swift.max(runBest, zone)
+        recordBounty(.sectorsCleared)
         if zone % 5 == 1 {
             addLog("Transmat to <\(area.name)> — \(area.faction.rawValue) contact.")
         }
@@ -413,6 +468,7 @@ final class Game {
         if manual {
             momentum = Swift.min(GameData.momentumCap, momentum + (precision ? 2 : 1))
             momentumDecay = 0
+            if precision { recordBounty(.precisionHits) }
         }
 
         hitPulse = 1
@@ -432,6 +488,7 @@ final class Game {
         e.shielded = false
         e.shieldTimer = GameData.shieldBreakWindow
         enemy = e
+        recordBounty(.shieldsBroken)
         addLog("<\(kind.label)> shield broken — \(Int(GameData.shieldBreakWindow))s window.")
         showToast("\(kind.label) broken")
     }
@@ -459,6 +516,7 @@ final class Game {
 
     func use(_ ability: Ability) {
         guard canUse(ability), enemy != nil else { return }
+        recordBounty(.abilityCasts)
         switch ability {
         case .grenade:
             cooldowns["grenade"] = cooldownLength(.grenade)
@@ -531,6 +589,7 @@ final class Game {
     }
 
     func addDrop(_ item: Item) {
+        recordBounty(.engrams)
         postmaster.insert(item, at: 0)
         while postmaster.count > 12 {
             let dropped = postmaster.removeLast()
@@ -662,6 +721,8 @@ final class Game {
         subclass = keptSub
         superEnergy = 0
         momentum = 0
+        bounties = []
+        refillBounties()
         buffs = []
         cooldowns = ["grenade": 0, "melee": 0, "class": 0]
 
@@ -705,6 +766,11 @@ final class Game {
 
         driftWeakPoint(dt)
 
+        if let e = enemy {
+            if hpTrail < e.hp { hpTrail = e.hp }                     // new target
+            else { hpTrail += (e.hp - hpTrail) * Swift.min(1, dt * 4) }
+        }
+
         if momentum > 0 {
             momentumDecay += dt
             if momentumDecay >= GameData.momentumDecayInterval {
@@ -742,6 +808,80 @@ final class Game {
         weakPoint.y = ny * 0.8
     }
 
+    // MARK: - Catalysts
+
+    /// Equipped weapons level toward a catalyst on credited kills. Armour never
+    /// rolls one, and idle kills never contribute.
+    private func awardCatalystXP() {
+        for slot in GameData.SlotKind.allCases where slot.isWeapon {
+            guard var item = gear[slot], !item.hasCatalyst else { continue }
+            item.catalystXP = item.catalystProgress + GameData.catalystXPPerKill
+            if item.catalystProgress >= GameData.catalystThreshold {
+                let def = GameData.weaponPerks.randomElement()!
+                let value = (def.base * GameData.rarities[4].mult
+                             * Double.random(in: 0.9...1.2) * 10).rounded() / 10
+                item.catalystPerk = Perk(key: def.key, name: def.name,
+                                         desc: def.desc, value: value,
+                                         negative: def.negative)
+                addLog("<Catalyst complete> — \(item.name) gained \(def.name).")
+                showToast("Catalyst — \(item.name)")
+            }
+            gear[slot] = item
+        }
+    }
+
+    // MARK: - Bounties
+
+    /// Keeps three live bounties on the board at all times.
+    func refillBounties() {
+        while bounties.count < 3 { bounties.append(rollBounty()) }
+    }
+
+    func rollBounty() -> BountyState {
+        let kind = BountyKind.allCases.randomElement()!
+        let target: Double
+        switch kind {
+        case .kills:          target = Double(Int.random(in: 40...120))
+        case .precisionHits:  target = Double(Int.random(in: 15...50))
+        case .shieldsBroken:  target = Double(Int.random(in: 2...6))
+        case .sectorsCleared: target = Double(Int.random(in: 2...5))
+        case .engrams:        target = Double(Int.random(in: 4...12))
+        case .abilityCasts:   target = Double(Int.random(in: 10...30))
+        }
+        // Harder objectives pay a shard; the routine ones pay glimmer.
+        let shards = (kind == .shieldsBroken || kind == .sectorsCleared) && Bool.random() ? 1 : 0
+        let reward = glimmerReward(zone, boss: false) * target * 1.6
+        return BountyState(kind: kind, target: target,
+                           rewardGlimmer: shards > 0 ? reward * 0.4 : reward,
+                           rewardShards: shards)
+    }
+
+    func recordBounty(_ kind: BountyKind, _ amount: Double = 1) {
+        var changed = false
+        for i in bounties.indices where bounties[i].kind == kind && !bounties[i].complete {
+            bounties[i].progress += amount
+            changed = true
+        }
+        if changed, bounties.contains(where: { $0.complete && !$0.claimed }) {
+            // no-op: the badge reads this state directly
+        }
+    }
+
+    var claimableBounties: Int { bounties.filter { $0.complete && !$0.claimed }.count }
+
+    func claimBounty(_ id: String) {
+        guard let i = bounties.firstIndex(where: { $0.id == id }),
+              bounties[i].complete, !bounties[i].claimed else { return }
+        let b = bounties[i]
+        glimmer += b.rewardGlimmer
+        shards += b.rewardShards
+        addLog("Bounty complete — <\(Fmt.n(b.rewardGlimmer)) glimmer>"
+               + (b.rewardShards > 0 ? " and \(b.rewardShards) shard" : ""))
+        showToast("Bounty claimed")
+        bounties.remove(at: i)
+        refillBounties()
+    }
+
     // MARK: - Log & toast
 
     func addLog(_ message: String) {
@@ -774,7 +914,8 @@ final class Game {
             zone: zone, kills: killsInZone, glimmer: glimmer, shards: shards,
             shardPerks: shardPerks, stats: stats, best: best, runBest: runBest,
             team: team, gear: gear, postmaster: postmaster, subclass: subclass,
-            superEnergy: superEnergy, lastSeen: lastSeen
+            superEnergy: superEnergy, lastSeen: lastSeen,
+            bounties: bounties
         )
         if let data = try? JSONEncoder().encode(state) {
             UserDefaults.standard.set(data, forKey: Self.saveKey)
@@ -799,6 +940,8 @@ final class Game {
         subclass = s.subclass
         superEnergy = s.superEnergy
         lastSeen = s.lastSeen
+        bounties = s.bounties ?? []
+        refillBounties()
         spawn()
         addLog("Welcome back, Guardian. Sector <\(zone)>, \(area.name).")
         applyOfflineProgress()

@@ -5,6 +5,7 @@ enum ActiveSheet: Identifiable {
     case subclass
     case resetLight
     case record
+    case bounties
 
     var id: String {
         switch self {
@@ -12,6 +13,7 @@ enum ActiveSheet: Identifiable {
         case .subclass: return "subclass"
         case .resetLight: return "reset"
         case .record: return "record"
+        case .bounties: return "bounties"
         }
     }
 }
@@ -210,6 +212,13 @@ struct TopBar: View {
 
     private var actions: some View {
         HStack(spacing: 6) {
+            Button("Bounties") { sheet = .bounties }
+                .buttonStyle(HudButtonStyle(ghost: true))
+                .overlay(alignment: .topTrailing) {
+                    if game.claimableBounties > 0 {
+                        Circle().fill(Pal.ok).frame(width: 7, height: 7).offset(x: 2, y: -2)
+                    }
+                }
             Button("Subclass") { sheet = .subclass }
                 .buttonStyle(HudButtonStyle(ghost: true))
             Button(game.pendingShards > 0 ? "Reset Light +\(game.pendingShards)" : "Reset Light") {

@@ -49,6 +49,13 @@ extension Font {
     static func display(_ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
         .system(size: size, weight: weight).width(.condensed)
     }
+    // A real scale, so labels, values and headings stop reading the same
+    // weight. Use these rather than ad-hoc point sizes.
+    static var hero: Font { .system(size: 32, weight: .bold).width(.condensed) }
+    static var title: Font { .system(size: 19, weight: .semibold).width(.condensed) }
+    static var header: Font { .system(size: 13, weight: .bold).width(.condensed) }
+    static var value: Font { .system(size: 11, weight: .semibold).width(.condensed) }
+
     /// Data / ticker face.
     static func data(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
@@ -77,16 +84,23 @@ struct Chamfer: Shape {
 // MARK: - Reusable chrome
 
 struct PanelBackground: ViewModifier {
+    /// The viewport is the focal point; side panels should recede behind it.
+    var elevated: Bool = false
+
     func body(content: Content) -> some View {
         content
             .background(Pal.hull)
             .overlay(alignment: .top) { Pal.edge.frame(height: 1) }
-            .overlay(Rectangle().stroke(Pal.rail, lineWidth: 1))
+            .overlay(Rectangle().stroke(elevated ? Pal.rail.opacity(1.6) : Pal.rail,
+                                        lineWidth: 1))
+            .shadow(color: elevated ? .black.opacity(0.55) : .clear, radius: 18, y: 4)
     }
 }
 
 extension View {
-    func panel() -> some View { modifier(PanelBackground()) }
+    func panel(elevated: Bool = false) -> some View {
+        modifier(PanelBackground(elevated: elevated))
+    }
 
     /// Uppercase micro-label used for every field caption in the HUD.
     func hudLabel() -> some View {

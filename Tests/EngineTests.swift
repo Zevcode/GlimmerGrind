@@ -241,6 +241,97 @@ func runTests() {
         check("Weakened expires", (g.enemy?.weakened ?? 0) == 0)
     }
 
+    section("Catalysts")
+    do {
+        let g = stocked()
+        g.zone = 12
+        g.spawn()
+        var weapon = Item(slot: .kinetic, type: "Scout Rifle", name: "Test Roll",
+                          rarity: 2, power: 100, perks: [])
+        weapon.catalystXP = GameData.catalystThreshold - 2
+        g.gear[.kinetic] = weapon
+        let armour = Item(slot: .helmet, type: "Helmet", name: "Test Helm",
+                          rarity: 2, power: 100, perks: [])
+        g.gear[.helmet] = armour
+
+        check("a fresh item has no catalyst", !armour.hasCatalyst)
+        check("armour cannot roll one", !armour.canHaveCatalyst)
+        check("weapons can", weapon.canHaveCatalyst)
+
+        // Two credited kills to cross the threshold.
+        for _ in 0..<2 {
+            g.enemy?.hp = 1
+            g.fire()
+        }
+        let after = g.gear[.kinetic]!
+        check("catalyst XP accrues on credited kills",
+              after.catalystProgress >= GameData.catalystThreshold,
+              "\(after.catalystProgress)")
+        check("the catalyst unlocks at threshold", after.hasCatalyst)
+        check("it adds exactly one perk", after.allPerks.count == after.perks.count + 1)
+        check("armour gained nothing", g.gear[.helmet]?.hasCatalyst == false)
+
+        // And it must actually feed the stat sheet.
+        if let cat = after.catalystPerk {
+            check("the catalyst perk counts toward gear stats",
+                  g.gearStat(cat.key) >= cat.value)
+        }
+
+        // Idle kills must not level it.
+        let idle = stocked()
+        idle.zone = 12
+        idle.spawn()
+        var w2 = Item(slot: .energy, type: "SMG", name: "Idle Roll",
+                      rarity: 2, power: 100, perks: [])
+        w2.catalystXP = 0
+        idle.gear[.energy] = w2
+        for _ in 0..<600 { idle.tick(0.05) }
+        check("idle kills do not level a catalyst",
+              (idle.gear[.energy]?.catalystProgress ?? 0) == 0,
+              "\(idle.gear[.energy]?.catalystProgress ?? -1)")
+    }
+
+    section("Bounties")
+    do {
+        let g = stocked()
+        check("three bounties are always on the board", g.bounties.count == 3,
+              "\(g.bounties.count)")
+
+        // Each objective must respond to its own event and no other.
+        let probe = stocked()
+        probe.bounties = [BountyState(kind: .precisionHits, target: 5,
+                                      rewardGlimmer: 100, rewardShards: 0)]
+        probe.fire(precision: false)
+        check("a body shot does not advance a precision bounty",
+              probe.bounties[0].progress == 0)
+        probe.fire(precision: true)
+        check("a precision hit does", probe.bounties[0].progress == 1)
+        probe.fire(manual: false, precision: true)
+        check("an auto-shot does not", probe.bounties[0].progress == 1)
+
+        let casts = stocked()
+        casts.bounties = [BountyState(kind: .abilityCasts, target: 5,
+                                      rewardGlimmer: 100, rewardShards: 0)]
+        casts.use(.grenade)
+        check("casting an ability advances an ability bounty",
+              casts.bounties[0].progress == 1)
+
+        // Claiming pays out once and reissues.
+        let claim = stocked()
+        claim.glimmer = 0
+        claim.bounties = [BountyState(kind: .kills, target: 1, progress: 5,
+                                      rewardGlimmer: 4242, rewardShards: 1)]
+        let id = claim.bounties[0].id
+        check("a finished bounty reads as claimable", claim.claimableBounties == 1)
+        claim.claimBounty(id)
+        check("claiming pays the glimmer", claim.glimmer >= 4242, "\(claim.glimmer)")
+        check("claiming pays the shard", claim.shards >= 1)
+        check("the board refills to three", claim.bounties.count == 3)
+        check("the claimed bounty is gone", !claim.bounties.contains { $0.id == id })
+        claim.claimBounty(id)
+        check("it cannot be claimed twice", claim.glimmer < 8484)
+    }
+
     section("Fireteam")
     do {
         let g = stocked(0, glimmer: 1e6)
@@ -329,6 +420,28 @@ func runTests() {
         check("shards round-trip", reloaded.shards == 7, "got \(reloaded.shards)")
         reloaded.wipeSave()
         check("wipe clears the save", Game().zone == 1)
+
+        // A save written before bounties and catalysts existed must still load.
+        // load() uses `try?`, so a decode failure would silently wipe it.
+        let v1 = """
+        {"zone":26,"kills":3,"glimmer":911238.0,"shards":0,"shardPerks":{},
+         "stats":{"clicks":100,"kills":200,"drops":10,"bosses":2,"resets":0,"damage":5000},
+         "best":26,"runBest":26,"team":[{"level":113,"upgrades":3}],
+         "gear":["kinetic",{"id":"a","slot":"kinetic","type":"Scout Rifle","name":"Old Roll",
+                            "rarity":2,"power":124,
+                            "perks":[{"key":"click","name":"Rangefinder","desc":"weapon damage",
+                                      "value":7.0,"negative":false}]}],
+         "postmaster":[],"subclass":"void","superEnergy":41.0,
+         "lastSeen":768000000.0}
+        """
+        let decodedV1 = try? JSONDecoder().decode(SaveState.self, from: Data(v1.utf8))
+        check("a pre-bounty, pre-catalyst save still decodes", decodedV1 != nil)
+        check("its sector survives", decodedV1?.zone == 26, "got \(decodedV1?.zone ?? -1)")
+        check("its glimmer survives", (decodedV1?.glimmer ?? 0) > 911_000)
+        check("its gear survives", decodedV1?.gear.isEmpty == false)
+        check("missing bounties decode as nil, not a failure", decodedV1?.bounties == nil)
+        check("an item without catalyst keys decodes",
+              decodedV1?.gear[.kinetic]?.hasCatalyst == false)
 
         // Combat state is session-only; letting it into SaveState would break
         // every existing save on disk.

@@ -164,6 +164,11 @@ enum GameData {
     static let brokenDamageMultiplier = 1.50     // during the break window
     static let shieldBreakWindow = 8.0
 
+    /// Catalysts. Only credited kills count, so a catalyst is something you
+    /// play toward rather than something the fireteam farms for you.
+    static let catalystXPPerKill = 1.0
+    static let catalystThreshold = 600.0
+
     /// Precision and momentum.
     static let precisionMultiplier = 3.5
     static let momentumCap = 8

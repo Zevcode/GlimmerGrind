@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -n '/    func save\\(\\) {/,/^    }/p' Sources/GlimmerGrind/Model/Game.swift)",
+      "Bash(sed -n '/        superEnergy = s.superEnergy/,/        return true/p' Sources/GlimmerGrind/Model/Game.swift)",
+      "Bash(./run-tests.sh)"
+    ]
+  }
+}
