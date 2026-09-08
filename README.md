@@ -1,7 +1,6 @@
 # Glimmer Grind
 
-An idle looter-shooter for macOS — Clicker Heroes progression wearing a
-Destiny-flavoured HUD. Farm sectors, build a fireteam, chase engrams, reset your
+An idle looter-shooter for macOS — Progression, Farm sectors, build a fireteam, chase engrams, reset your
 Light for shards, repeat.
 
 Written in SwiftUI. No dependencies — every sigil, class mark, engram and the
