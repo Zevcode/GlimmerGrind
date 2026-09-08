@@ -144,6 +144,23 @@ struct Enemy {
     var weakened: Double = 0
 }
 
+// MARK: - Game feel
+
+/// Debris thrown off a kill. Lives in the model so it survives view rebuilds
+/// and can be tested headlessly like everything else.
+struct Particle: Identifiable {
+    let id = UUID()
+    var x: Double
+    var y: Double
+    var vx: Double
+    var vy: Double
+    var life: Double
+    var maxLife: Double
+    var hex: UInt32
+
+    var fade: Double { Swift.max(0, life / maxLife) }
+}
+
 // MARK: - Damage popups
 
 struct Popup: Identifiable {
@@ -196,6 +213,19 @@ final class Game {
 
     /// Lags the real health value so a heavy hit leaves a visible trail.
     var hpTrail: Double = 0
+
+    // Game feel. All of it decays in tick(), so nothing needs a view timer.
+    /// Freezes the simulation for a few frames on a heavy hit — the pause that
+    /// makes a crit land.
+    var hitStop: Double = 0
+    /// Below 1 the world runs slow; eases back on its own.
+    var timeScale: Double = 1
+    /// Shake amplitude, 0...1, plus the offset the view reads.
+    var shake: Double = 0
+    var shakeOffset: CGPoint = .zero
+    /// Muzzle flash brightness, decays fast.
+    var muzzle: Double = 0
+    var particles: [Particle] = []
 
     /// Stacks of sustained fire. Builds on every player hit, decays when you stop.
     var momentum: Int = 0
@@ -354,6 +384,7 @@ final class Game {
                       area: a, timer: boss ? 30 : 0,
                       champion: champion, shielded: champion != nil)
         hpTrail = hp
+        particles.removeAll()
         seedWeakPoint()
     }
 
@@ -392,6 +423,12 @@ final class Game {
         if e.hp <= 0 { kill() }
     }
 
+    /// Shake scaled to how big a bite the hit took out of the target.
+    private func impactShake(_ dealt: Double, of maxHP: Double) {
+        guard maxHP > 0 else { return }
+        addShake(Swift.min(0.6, dealt / maxHP * 2.5))
+    }
+
     private func kill() {
         guard let e = enemy else { return }
         let boss = e.isBoss
@@ -416,6 +453,9 @@ final class Game {
             spawn()
             return
         }
+
+        burst(boss ? 42 : 18, hex: e.area.hex, speed: boss ? 260 : 170)
+        addShake(boss ? 0.9 : 0.3)
 
         recordBounty(.kills)
         awardCatalystXP()
@@ -472,6 +512,13 @@ final class Game {
         }
 
         hitPulse = 1
+        muzzle = 1
+        if precision || crit {
+            hitStop = precision ? 0.055 : 0.035     // the pause that sells the hit
+            addShake(precision ? 0.5 : 0.34)
+        } else {
+            addShake(0.12)
+        }
         let kind: Popup.Kind = precision ? .precision : (crit ? .crit : .hit)
         damage(dmg, popup: kind, at: point, fromPlayer: manual)
     }
@@ -489,6 +536,10 @@ final class Game {
         e.shieldTimer = GameData.shieldBreakWindow
         enemy = e
         recordBounty(.shieldsBroken)
+        // A break is the payoff for a whole rotation — sell it.
+        timeScale = 0.35
+        addShake(0.8)
+        burst(26, hex: kind.hex, speed: 210)
         addLog("<\(kind.label)> shield broken — \(Int(GameData.shieldBreakWindow))s window.")
         showToast("\(kind.label) broken")
     }
@@ -537,6 +588,7 @@ final class Game {
         case .superAbility:
             superEnergy = 0
             applyShieldBreak(.superAbility)
+            addShake(0.85)
             let dmg = (fireteamDPS * 45 + clickDamage * 60) * abilityMult
             damage(dmg, popup: .ability, fromPlayer: true)
             buffs.append(Buff(kind: .all, value: 2.5, remaining: 9, name: sub.superName))
@@ -734,7 +786,18 @@ final class Game {
 
     // MARK: - Tick
 
-    func tick(_ dt: Double) {
+    func tick(_ rawDt: Double) {
+        // Hit-stop: the whole world holds still for a few frames.
+        if hitStop > 0 {
+            hitStop = Swift.max(0, hitStop - rawDt)
+            decayPresentation(rawDt)
+            return
+        }
+        if timeScale < 1 { timeScale = Swift.min(1, timeScale + rawDt * 1.1) }
+        let dt = rawDt * timeScale
+
+        decayPresentation(rawDt)
+
         let dps = fireteamDPS
         if enemy != nil && dps > 0 { damage(dps * dt, popup: nil) }
 
@@ -791,6 +854,50 @@ final class Game {
         let now = Date()
         popups.removeAll { now.timeIntervalSince($0.born) > 0.95 }
         if toast != nil && now > toastExpiry { toast = nil }
+    }
+
+    /// Shake, muzzle flash and debris run on real time, not scaled time, so a
+    /// slow-motion moment still reads crisply.
+    private func decayPresentation(_ dt: Double) {
+        if shake > 0 {
+            shake = Swift.max(0, shake - dt * 3.2)
+            let a = shake * 11
+            shakeOffset = CGPoint(x: Double.random(in: -a...a), y: Double.random(in: -a...a))
+        } else if shakeOffset != .zero {
+            shakeOffset = .zero
+        }
+
+        if muzzle > 0 { muzzle = Swift.max(0, muzzle - dt * 9) }
+
+        if !particles.isEmpty {
+            for i in particles.indices {
+                particles[i].x += particles[i].vx * dt
+                particles[i].y += particles[i].vy * dt
+                particles[i].vy += 150 * dt            // a little gravity
+                particles[i].vx *= 0.99
+                particles[i].life -= dt
+            }
+            particles.removeAll { $0.life <= 0 }
+        }
+    }
+
+    func addShake(_ amount: Double) {
+        shake = Swift.min(1, shake + amount)
+    }
+
+    /// Debris burst, thrown from the sigil in the enemy's own colour.
+    private func burst(_ count: Int, hex: UInt32, speed: Double) {
+        for _ in 0..<count {
+            let angle = Double.random(in: 0..<(2 * .pi))
+            let v = Double.random(in: speed * 0.35...speed)
+            let life = Double.random(in: 0.45...0.95)
+            particles.append(Particle(x: Double.random(in: -8...8),
+                                      y: Double.random(in: -8...8),
+                                      vx: cos(angle) * v,
+                                      vy: sin(angle) * v - 40,
+                                      life: life, maxLife: life, hex: hex))
+        }
+        if particles.count > 220 { particles.removeFirst(particles.count - 220) }
     }
 
     /// Drifts the weak point and reflects it off a radius-0.8 circle so it

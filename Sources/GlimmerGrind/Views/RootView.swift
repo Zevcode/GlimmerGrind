@@ -18,12 +18,21 @@ enum ActiveSheet: Identifiable {
     }
 }
 
-enum SidePanel: String, CaseIterable { case fireteam = "Fireteam", gear = "Gear" }
+/// The roster and the loadout are menus. They slide over the game rather than
+/// permanently occupying two thirds of the window.
+enum Drawer: String, Identifiable, CaseIterable {
+    case fireteam, gear
+    var id: String { rawValue }
+    var title: String { self == .fireteam ? "Fireteam" : "Loadout" }
+    var key: String { self == .fireteam ? "F" : "I" }
+    var edge: Edge { self == .fireteam ? .leading : .trailing }
+    var width: CGFloat { self == .fireteam ? 330 : 350 }
+}
 
 struct RootView: View {
     @State private var game = Game()
     @State private var sheet: ActiveSheet?
-    @State private var sidePanel: SidePanel = .fireteam
+    @State private var drawer: Drawer?
     @State private var lastTick = Date()
     @State private var lastSave = Date()
 
@@ -37,40 +46,37 @@ struct RootView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let compact = geo.size.width < 1100
+            let compact = geo.size.width < 900
 
             VStack(spacing: 10) {
-                TopBar(game: game, sheet: $sheet, compact: compact)
-
-                if compact {
-                    VStack(spacing: 10) {
-                        CombatView(game: game, compact: true)
-                            .frame(minHeight: 380)
-
-                        Picker("", selection: $sidePanel) {
-                            ForEach(SidePanel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                TopBar(game: game, sheet: $sheet, drawer: $drawer, compact: compact)
+                    .fixedSize(horizontal: false, vertical: true)
+                CombatView(game: game, compact: compact)
+                    .layoutPriority(1)
+            }
+            .padding(10)
+            .frame(maxWidth: 1560)
+            .overlay {
+                if let open = drawer {
+                    ZStack(alignment: open.edge == .leading ? .leading : .trailing) {
+                        Color.black.opacity(0.5)
+                            .ignoresSafeArea()
+                            .onTapGesture { drawer = nil }
 
                         Group {
-                            switch sidePanel {
+                            switch open {
                             case .fireteam: FireteamPanel(game: game)
                             case .gear: GearPanel(game: game, sheet: $sheet)
                             }
                         }
-                        .frame(minHeight: 320)
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 10) {
-                        FireteamPanel(game: game).frame(width: 296)
-                        CombatView(game: game, compact: false)
-                        GearPanel(game: game, sheet: $sheet).frame(width: 322)
+                        .frame(width: min(open.width, geo.size.width - 40))
+                        .padding(.vertical, 10)
+                        .padding(open.edge == .leading ? .leading : .trailing, 10)
+                        .transition(.move(edge: open.edge))
                     }
                 }
             }
-            .padding(10)
-            .frame(maxWidth: 1560)
+            .animation(.easeOut(duration: 0.2), value: drawer)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background {
@@ -116,6 +122,13 @@ struct RootView: View {
                 game.save()
             }
         }
+        .onKeyPress(.escape) { drawer = nil; return .handled }
+        .onKeyPress(characters: CharacterSet(charactersIn: "fFiI")) { press in
+            let c = press.characters.lowercased()
+            if c == "f" { drawer = drawer == .fireteam ? nil : .fireteam }
+            if c == "i" { drawer = drawer == .gear ? nil : .gear }
+            return .handled
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
@@ -135,6 +148,7 @@ struct RootView: View {
 struct TopBar: View {
     let game: Game
     @Binding var sheet: ActiveSheet?
+    @Binding var drawer: Drawer?
     var compact: Bool
 
     var body: some View {
@@ -212,6 +226,15 @@ struct TopBar: View {
 
     private var actions: some View {
         HStack(spacing: 6) {
+            ForEach(Drawer.allCases) { d in
+                Button("\(d.title) · \(d.key)") { drawer = (drawer == d ? nil : d) }
+                    .buttonStyle(HudButtonStyle(hot: drawer == d, ghost: drawer != d))
+                    .overlay(alignment: .topTrailing) {
+                        if d == .gear && !game.postmaster.isEmpty {
+                            Circle().fill(Pal.gold).frame(width: 7, height: 7).offset(x: 2, y: -2)
+                        }
+                    }
+            }
             Button("Bounties") { sheet = .bounties }
                 .buttonStyle(HudButtonStyle(ghost: true))
                 .overlay(alignment: .topTrailing) {
@@ -219,14 +242,23 @@ struct TopBar: View {
                         Circle().fill(Pal.ok).frame(width: 7, height: 7).offset(x: 2, y: -2)
                     }
                 }
-            Button("Subclass") { sheet = .subclass }
-                .buttonStyle(HudButtonStyle(ghost: true))
-            Button(game.pendingShards > 0 ? "Reset Light +\(game.pendingShards)" : "Reset Light") {
-                sheet = .resetLight
+            if game.pendingShards > 0 {
+                Button("Reset +\(game.pendingShards)") { sheet = .resetLight }
+                    .buttonStyle(HudButtonStyle(hot: true))
             }
-            .buttonStyle(HudButtonStyle(hot: game.pendingShards > 0, ghost: game.pendingShards == 0))
-            Button("Record") { sheet = .record }
-                .buttonStyle(HudButtonStyle(ghost: true))
+            Menu {
+                Button("Subclass") { sheet = .subclass }
+                Button("Reset Light") { sheet = .resetLight }
+                Button("Vanguard Record") { sheet = .record }
+            } label: {
+                Text("More")
+                    .font(.display(11, .semibold)).tracking(1.3).textCase(.uppercase)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .padding(.horizontal, 11).padding(.vertical, 7)
+            .background(Chamfer().stroke(Pal.rail, lineWidth: 1))
         }
         .padding(.horizontal, 10)
     }

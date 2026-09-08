@@ -304,6 +304,21 @@ struct SlotTile: View {
                 Text(item.map { "\($0.power) · \($0.type)" } ?? "—")
                     .font(.data(10))
                     .foregroundStyle(Pal.ash)
+
+                // The roll itself, legible without a second click.
+                if let item, !item.allPerks.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(Array(item.allPerks.enumerated()), id: \.offset) { _, perk in
+                            Text(GameData.perkCode(perk.name))
+                                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Pal.solar)
+                                .padding(.horizontal, 3).padding(.vertical, 1)
+                                .background(Pal.solar.opacity(0.12))
+                                .overlay(Rectangle().stroke(Pal.solar.opacity(0.3), lineWidth: 0.5))
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 50, alignment: .topLeading)
             .padding(.horizontal, 9).padding(.vertical, 7)

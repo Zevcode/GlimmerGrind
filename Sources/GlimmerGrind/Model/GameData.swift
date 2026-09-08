@@ -250,6 +250,19 @@ enum GameData {
         .init(key: .luck,        name: "Prime Focus",     desc: "rare drop weight", base: 7,  negative: false)
     ]
 
+    /// Three-letter codes so an equipped roll is readable at a glance in the
+    /// loadout, without opening the item.
+    static let perkCodes: [String: String] = [
+        "Rangefinder": "RNG", "Outlaw": "OTL", "Firefly": "FFL",
+        "Vorpal Weapon": "VRP", "Demolitionist": "DEM",
+        "Bountiful Wells": "BWL", "Reaper": "RPR", "Ashes to Assets": "ATA",
+        "Distribution": "DST", "Prime Focus": "PRF"
+    ]
+
+    static func perkCode(_ name: String) -> String {
+        perkCodes[name] ?? String(name.prefix(3)).uppercased()
+    }
+
     static let weaponTypes: [SlotKind: [String]] = [
         .kinetic: ["Hand Cannon", "Pulse Rifle", "Scout Rifle", "Auto Rifle", "Sidearm", "Combat Bow"],
         .energy:  ["Submachine Gun", "Fusion Rifle", "Trace Rifle", "Glaive", "Shotgun", "Sniper Rifle"],

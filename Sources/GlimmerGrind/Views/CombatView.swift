@@ -24,6 +24,7 @@ struct CombatView: View {
     let game: Game
     var compact: Bool
     @State private var breathing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var faction: Color { Color(hex: game.enemy?.area.hex ?? game.area.hex) }
 
@@ -34,6 +35,8 @@ struct CombatView: View {
             abilityBar
             ticker
         }
+        .frame(maxWidth: 1240)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Zone bar
@@ -127,6 +130,8 @@ struct CombatView: View {
                 .animation(.easeInOut(duration: 1.2), value: faction)
                 .animation(.easeOut(duration: 0.5), value: game.flashColor)
 
+                let sigil = min(max(geo.size.height * 0.40, 130), 330)
+
                 if let enemy = game.enemy {
                     VStack(spacing: 14) {
                         Spacer(minLength: 0)
@@ -139,19 +144,18 @@ struct CombatView: View {
                                     .fill(RadialGradient(
                                         colors: [Pal.void.opacity(0.75), .clear],
                                         center: .center, startRadius: 0,
-                                        endRadius: (compact ? 120 : 176) * 0.45))
-                                    .frame(width: (compact ? 120 : 176) * 0.9,
-                                           height: (compact ? 120 : 176) * 0.22)
-                                    .offset(y: (compact ? 120 : 176) * 0.52)
+                                        endRadius: sigil * 0.45))
+                                    .frame(width: sigil * 0.9, height: sigil * 0.22)
+                                    .offset(y: sigil * 0.52)
                                     .allowsHitTesting(false)
 
                                 FactionGlyph(faction: enemy.area.faction)
                                     .foregroundStyle(faction)
                                     .shadow(color: faction.opacity(0.55), radius: 28)
                                     .allowsHitTesting(false)
-                                reticle(sigil: compact ? 120 : 176)
+                                reticle(sigil: sigil)
                             }
-                            .frame(width: compact ? 120 : 176, height: compact ? 120 : 176)
+                            .frame(width: sigil, height: sigil)
 
                             Text(enemy.rank)
                                 .font(.data(9.5))
@@ -171,13 +175,35 @@ struct CombatView: View {
                         .animation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true),
                                    value: breathing)
 
-                        Spacer(minLength: 0)
-
                         healthBar(enemy)
-                            .frame(maxWidth: 560)
+                            .frame(maxWidth: 520)
+                            .padding(.top, 6)
                             .allowsHitTesting(false)
+
+                        Spacer(minLength: 0)
                     }
                     .padding(18)
+                }
+
+                // Debris from kills and shield breaks.
+                if !reduceMotion {
+                    ForEach(game.particles) { p in
+                        Rectangle()
+                            .fill(Color(hex: p.hex).opacity(p.fade))
+                            .frame(width: 3, height: 3)
+                            .offset(x: p.x, y: p.y - geo.size.height * 0.06)
+                    }
+                    .allowsHitTesting(false)
+                }
+
+                // Muzzle flash.
+                if game.muzzle > 0 && !reduceMotion {
+                    Circle()
+                        .fill(RadialGradient(colors: [Pal.gold.opacity(0.55 * game.muzzle), .clear],
+                                             center: .center, startRadius: 0, endRadius: 90))
+                        .frame(width: 180, height: 180)
+                        .offset(y: -geo.size.height * 0.06)
+                        .allowsHitTesting(false)
                 }
 
                 // damage numbers
@@ -190,6 +216,8 @@ struct CombatView: View {
                 bracket(.topLeading); bracket(.topTrailing)
                 bracket(.bottomLeading); bracket(.bottomTrailing)
             }
+            .offset(x: reduceMotion ? 0 : game.shakeOffset.x,
+                    y: reduceMotion ? 0 : game.shakeOffset.y)
             .contentShape(Rectangle())
             .onTapGesture(coordinateSpace: .local) { location in
                 let before = game.stats.kills
