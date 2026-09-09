@@ -40,6 +40,20 @@ struct RootView: View {
 
     private let ticker = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
+    /// Every drawer change goes through here.
+    ///
+    /// The animation belongs on the mutation, not on the container. A
+    /// `.animation(_:value:)` hung on the frame that also holds CombatView
+    /// sweeps *every* change in that subtree into the same transaction for its
+    /// duration — the health bar, particles, shake offset and damage popups all
+    /// updating at 20Hz — so the game visibly lagged while the drawer moved.
+    ///
+    /// A spring is also interruptible: toggling F then I mid-slide retargets
+    /// from the current position instead of restarting.
+    private func setDrawer(_ next: Drawer?) {
+        withAnimation(.smooth(duration: 0.26)) { drawer = next }
+    }
+
     var factionColor: Color {
         Color(hex: game.enemy?.area.hex ?? game.area.hex)
     }
@@ -61,7 +75,10 @@ struct RootView: View {
                     ZStack(alignment: open.edge == .leading ? .leading : .trailing) {
                         Color.black.opacity(0.5)
                             .ignoresSafeArea()
-                            .onTapGesture { drawer = nil }
+                            .onTapGesture { setDrawer(nil) }
+                            // Without this the dim popped in and out while the
+                            // panel slid, which is most of what read as janky.
+                            .transition(.opacity)
 
                         Group {
                             switch open {
@@ -72,11 +89,16 @@ struct RootView: View {
                         .frame(width: min(open.width, geo.size.width - 40))
                         .padding(.vertical, 10)
                         .padding(open.edge == .leading ? .leading : .trailing, 10)
-                        .transition(.move(edge: open.edge))
+                        // Sliding alone is abrupt at the edge; the fade softens
+                        // the last few points of travel.
+                        .transition(.move(edge: open.edge).combined(with: .opacity))
+                        // Distinct identity per drawer, so going straight from
+                        // one to the other plays both halves of the transition
+                        // instead of swapping content in place.
+                        .id(open)
                     }
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: drawer)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background {
@@ -97,19 +119,24 @@ struct RootView: View {
         .foregroundStyle(Pal.bone)
         .tint(Pal.solar)
         .overlay(alignment: .bottom) {
-            if let toast = game.toast {
-                Text(toast)
-                    .font(.display(12.5, .semibold))
-                    .tracking(1.2)
-                    .textCase(.uppercase)
-                    .padding(.horizontal, 20).padding(.vertical, 11)
-                    .background(Chamfer().fill(Pal.plate))
-                    .overlay(Chamfer().stroke(Pal.solar, lineWidth: 1))
-                    .padding(.bottom, 26)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Scoped to this ZStack rather than the root: a toast fires on
+            // every super, claim and catalyst, and hanging the animation on the
+            // whole view animated the combat scene along with it each time.
+            ZStack {
+                if let toast = game.toast {
+                    Text(toast)
+                        .font(.display(12.5, .semibold))
+                        .tracking(1.2)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 20).padding(.vertical, 11)
+                        .background(Chamfer().fill(Pal.plate))
+                        .overlay(Chamfer().stroke(Pal.solar, lineWidth: 1))
+                        .padding(.bottom, 26)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeOut(duration: 0.25), value: game.toast)
         }
-        .animation(.easeOut(duration: 0.25), value: game.toast)
         .sheet(item: $sheet) { active in
             SheetHost(game: game, active: active, sheet: $sheet)
         }
@@ -122,11 +149,11 @@ struct RootView: View {
                 game.save()
             }
         }
-        .onKeyPress(.escape) { drawer = nil; return .handled }
+        .onKeyPress(.escape) { setDrawer(nil); return .handled }
         .onKeyPress(characters: CharacterSet(charactersIn: "fFiI")) { press in
             let c = press.characters.lowercased()
-            if c == "f" { drawer = drawer == .fireteam ? nil : .fireteam }
-            if c == "i" { drawer = drawer == .gear ? nil : .gear }
+            if c == "f" { setDrawer(drawer == .fireteam ? nil : .fireteam) }
+            if c == "i" { setDrawer(drawer == .gear ? nil : .gear) }
             return .handled
         }
         .onChange(of: scenePhase) { _, phase in
@@ -150,6 +177,12 @@ struct TopBar: View {
     @Binding var sheet: ActiveSheet?
     @Binding var drawer: Drawer?
     var compact: Bool
+
+    /// Mirrors RootView.setDrawer — the toggle buttons animate the same way the
+    /// keyboard shortcuts do.
+    private func setDrawer(_ next: Drawer?) {
+        withAnimation(.smooth(duration: 0.26)) { drawer = next }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -227,7 +260,7 @@ struct TopBar: View {
     private var actions: some View {
         HStack(spacing: 6) {
             ForEach(Drawer.allCases) { d in
-                Button("\(d.title) · \(d.key)") { drawer = (drawer == d ? nil : d) }
+                Button("\(d.title) · \(d.key)") { setDrawer(drawer == d ? nil : d) }
                     .buttonStyle(HudButtonStyle(hot: drawer == d, ghost: drawer != d))
                     .overlay(alignment: .topTrailing) {
                         if d == .gear && !game.postmaster.isEmpty {
